@@ -1017,18 +1017,28 @@ class T5Stack(T5PreTrainedModel):
                 ]
                 if v is not None
             )
-
-        return BaseModelSCOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
-            compression_rates=compression_rates,
-            mask_dict=mask_dict,
-            sparsity_loss = sparsity_loss,
-        )
-
+        
+        if self.training:
+            return BaseModelSCOutputWithPastAndCrossAttentions(
+                last_hidden_state=hidden_states,
+                past_key_values=present_key_value_states,
+                hidden_states=all_hidden_states,
+                attentions=all_attentions,
+                cross_attentions=all_cross_attentions,
+                compression_rates=compression_rates,
+                mask_dict=mask_dict,
+                sparsity_loss = sparsity_loss,
+            )
+        else:
+            return BaseModelSCOutputWithPastAndCrossAttentions(
+                last_hidden_state=hidden_states,
+                past_key_values=present_key_value_states,
+                hidden_states=all_hidden_states,
+                attentions=all_attentions,
+                cross_attentions=all_cross_attentions,
+                compression_rates=compression_rates,
+                mask_dict=mask_dict,
+            )
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class T5SC_model(T5PreTrainedModel):
@@ -1263,7 +1273,7 @@ class T5SC_model(T5PreTrainedModel):
             compression_rate = encoder_outputs[-2]
             mask_dict = encoder_outputs[-1][-1]
         
-        # print("attention mask: ", attention_mask)
+        
        
         
             
@@ -1320,7 +1330,6 @@ class T5SC_model(T5PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                sparsity_loss = sparsity_loss,
             )
 
         sequence_output = decoder_outputs[0]
