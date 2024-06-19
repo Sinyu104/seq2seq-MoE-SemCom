@@ -181,7 +181,7 @@ class NativeScaler:
         self.scaler = GradScaler(init_scale=scale_factor)
         self.max_norm = max_norm
 
-    def __call__(self, step, loss, optimizer, accumulation_steps=2):
+    def __call__(self, step, loss, optimizer, accumulation_steps=1):
         loss = loss / accumulation_steps # Scale loss
         self.scaler.scale(loss).backward() # Compute gradients
         
