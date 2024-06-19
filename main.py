@@ -10,7 +10,7 @@ import sys
 import time
 import datetime
 from config import T5SC_config
-from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
+from peft import LoraConfig, get_peft_model, TaskType
 
 
 def seed_inital(seed=0):
