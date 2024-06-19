@@ -87,7 +87,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
     return final
 
 
-def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_freq=20, accumulation_steps=2):
+def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_freq=20, accumulation_steps=1):
     total_loss = 0.0
     cr = {task: 0 for task in args.train_task}
     task_batch = {task: 0 for task in args.train_task}
