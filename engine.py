@@ -23,9 +23,9 @@ def evaluate(args, model, testloader, device, print_freq=10):
                     texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
                     targets = data[1].squeeze().to(device, non_blocking=True)
                     batch_size = targets.shape[0]
-                    # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
-                    # cr['sen'] += compression_rate.item()
-                    # cr_batch['sen'] += 1
+                    compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    cr['sen'] += compression_rate.item()
+                    cr_batch['sen'] += 1
                     outputs = model.generate(input_ids=texts, attention_mask=masks)
                     
                     for ii in range(batch_size):
@@ -35,16 +35,16 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         scores['sen'] += result["exact_match"]
                         total['sen'] += 1
                     if batch_idx % print_freq == 0:
-                        print('[SEN] Test %d/%d: [score: %f]' %(batch_idx*batch_size, len(testloader['sen'].dataset), scores['sen']/total['sen']))# , cr['sen']/cr_batch['sen']
+                        print('[SEN] Test %d/%d: [score: %f] [compress rate: %f]' %(batch_idx*batch_size, len(testloader['sen'].dataset), scores['sen']/total['sen'], cr['sen']/cr_batch['sen']))
         elif task.lower() == 'trans':
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader['trans']):
                     texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
                     targets = data[1].squeeze().to(device, non_blocking=True)
                     batch_size = targets.shape[0]
-                    # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
-                    # cr['trans'] += compression_rate.item()
-                    # cr_batch['trans'] += 1
+                    compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    cr['trans'] += compression_rate.item()
+                    cr_batch['trans'] += 1
                     outputs = model.generate(input_ids=texts, attention_mask=masks, max_length=64)
                     for ii in range(batch_size):
                         predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
@@ -57,15 +57,15 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         scores['trans'] += result["score"]
                         total['trans'] += 1
                     if batch_idx % print_freq == 0:
-                        print('[TRANS] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['trans'].dataset), scores['trans']/total['trans']))# , cr['trans']/cr_batch['trans']
+                        print('[TRANS] Test %d/%d: [score: %f] [compress rate: %f]' %(batch_idx*batch_size, len(testloader['trans'].dataset), scores['trans']/total['trans'], cr['trans']/cr_batch['trans']))
         elif task.lower() == 'qa':
             for batch_idx, data in enumerate(testloader['qa']):
                     texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
                     targets = data[1].squeeze().to(device, non_blocking=True)
                     batch_size = targets.shape[0]
-                    # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
-                    # cr['qa'] += compression_rate.item()
-                    # cr_batch['qa'] += 1
+                    compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    cr['qa'] += compression_rate.item()
+                    cr_batch['qa'] += 1
                     outputs = model.generate(input_ids=texts, attention_mask=masks, max_length=32)
                     for ii in range(batch_size):
                         predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
@@ -78,12 +78,12 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         scores['qa'] += result["rouge1"]
                         total['qa'] += 1
                     if batch_idx % print_freq == 0:
-                        print('[QA] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['qa'].dataset), scores['qa']/total['qa']))# , cr['qa']/cr_batch['qa']
+                        print('[QA] Test %d/%d: [score: %f] [compress rate: %f]' %(batch_idx*batch_size, len(testloader['qa'].dataset), scores['qa']/total['qa'], cr['qa']/cr_batch['qa']))
         else:
             raise NotImplementedError
     for task in args.test_task:
         final['score'][task] = scores[task]/total[task]
-        # final['compression rate'][task] = cr[task]/cr_batch[task]
+        final['compression rate'][task] = cr[task]/cr_batch[task]
     return final
 
 
