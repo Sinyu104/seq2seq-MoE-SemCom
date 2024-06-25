@@ -1357,15 +1357,15 @@ class T5SC_model(T5PreTrainedModel):
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             if task == 'sen':
-                loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)+1e1*torch.mean(compression_rate)
+                loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.2, 1e-3)+1e1*torch.mean(compression_rate)
             elif task == 'trans':
-                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.7, 1e-3)+torch.mean(compression_rate)
+                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.9, 1e-3)+torch.mean(compression_rate)
             else:
-                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.6, 1e-3)+torch.mean(compression_rate)
+                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-4.0, 1e-3)+torch.mean(compression_rate)
             # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
             # print("Loss from compression: ", torch.mean(compression_rate))
             # print("Loss from codebook: ", 1e3*codebook_loss)
-            print("Final loss: ", loss)
+            # print("Final loss: ", loss)
             # input("Pausezzz")
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
         # output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
