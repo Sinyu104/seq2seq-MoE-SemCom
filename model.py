@@ -987,7 +987,6 @@ class T5Stack(T5PreTrainedModel):
             elif not self.is_decoder:
                 compression_rate_group = compression_rate_group + (torch.sum(attention_mask, dim = 1),)
                 compression_rates = compression_rate_group[-1]
-                mask_dict = attention_mask
                 # print("compression rates: ", compression_rate)
             else:
                 mask_dict = mask_dict + (encoder_attention_mask,)
@@ -1306,7 +1305,7 @@ class T5SC_model(T5PreTrainedModel):
                 inputs_embeds=decoder_inputs_embeds,
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
-                encoder_attention_mask=attention_mask,
+                encoder_attention_mask=mask_dict,
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
                 use_cache=use_cache,
@@ -1322,7 +1321,7 @@ class T5SC_model(T5PreTrainedModel):
                 inputs_embeds=decoder_inputs_embeds,
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
-                encoder_attention_mask=attention_mask,
+                encoder_attention_mask=mask_dict,
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
                 use_cache=use_cache,
@@ -1357,17 +1356,16 @@ class T5SC_model(T5PreTrainedModel):
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            # if task == 'sen':
-            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
-            # elif task == 'trans':
-            #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.7, 1e-3)# +torch.mean(compression_rate)
-            # else:
-            #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.6, 1e-3)# +torch.mean(compression_rate)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            if task == 'sen':
+                loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)+1e1*torch.mean(compression_rate)
+            elif task == 'trans':
+                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.7, 1e-3)+torch.mean(compression_rate)
+            else:
+                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.6, 1e-3)+torch.mean(compression_rate)
             # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
             # print("Loss from compression: ", torch.mean(compression_rate))
             # print("Loss from codebook: ", 1e3*codebook_loss)
-            # print("Final loss: ", loss)
+            print("Final loss: ", loss)
             # input("Pausezzz")
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
         # output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
