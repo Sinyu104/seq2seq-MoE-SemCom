@@ -88,7 +88,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
 
 
 def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_freq=20, accumulation_steps=2):
-    total_loss = 0.0
+    task_loss = {task: 0 for task in args.train_task}
     cr = {task: 0 for task in args.train_task}
     task_batch = {task: 0 for task in args.train_task}
     model.train()
@@ -116,10 +116,9 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
         if (i + 1) % accumulation_steps != 0:
             optimizer.step()
             optimizer.zero_grad()
-
-        total_loss += loss.item()
+        task_loss[task] += loss.item()
         if i % print_freq == 0:
-            print('[Batch: %d/%d] [loss: %f] [compression rate: %f]' %(i+1, len(dataloader), total_loss/task_batch[task], cr[task]/task_batch[task]))
+            print('[Batch: %d/%d] [loss: %f] [compression rate: %f]' %(i+1, len(dataloader), task_loss[task]/task_batch[task], cr[task]/task_batch[task]))
     
     avg_cr = {task: cr[task]/task_batch[task] for task in args.train_task}
         
