@@ -122,7 +122,7 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
     
     avg_cr = {task: cr[task]/task_batch[task] for task in args.train_task}
         
-    avg_train_loss = total_loss / len(dataloader)
+    avg_train_loss = {task: task_loss[task]/task_batch[task] for task in args.train_task}
     return {
         'loss':avg_train_loss, 
         'compression_rate': avg_cr

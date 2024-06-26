@@ -1357,11 +1357,11 @@ class T5SC_model(T5PreTrainedModel):
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             if task == 'sen':
-                loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.2, 1e-3)+1e1*torch.mean(compression_rate)
+                loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.2, 0.0)+1e1*torch.mean(compression_rate)
             elif task == 'trans':
-                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.9, 1e-3)+torch.mean(compression_rate)
+                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.9, 0.0)+torch.mean(compression_rate)
             else:
-                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-4.0, 1e-3)+torch.mean(compression_rate)
+                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.0, 0.0)+1e-1*torch.mean(compression_rate)
             # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
             # print("Loss from compression: ", torch.mean(compression_rate))
             # print("Loss from codebook: ", 1e3*codebook_loss)
