@@ -180,7 +180,7 @@ def get_args():
     parser.set_defaults(save_ckpt=True)
     parser.add_argument('--train_task', default='', choices=['sen', 'trans', 'qa'], type=str, nargs='+', help='Training tasks')
     parser.add_argument('--test_task', default='', choices=['sen', 'trans', 'qa'], nargs='+', type=str, help='Evaluation Data')
-    parser.add_argument('--device', default='cuda:2', help='Device to use for training/testing')
+    parser.add_argument('--device', default='cuda:3', help='Device to use for training/testing')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
 
