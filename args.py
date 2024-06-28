@@ -169,8 +169,8 @@ _CONFIG_FOR_DOC = "T5Config"
 def get_args():
     parser = argparse.ArgumentParser('my training script')
     parser.add_argument('--seed', default=1000, type=int)
-    parser.add_argument('--batch_size', default=30, type=int)
-    parser.add_argument('--epochs', default=400, type=int)
+    parser.add_argument('--batch_size', default=40, type=int)
+    parser.add_argument('--epochs', default=20, type=int)
     parser.add_argument('--save_freq', default=3, type=int)
     parser.add_argument('--update_freq', default=1, type=int)
     parser.add_argument('--model', default='T5SC_model', metavar='MODEL',type=str, help='Name of model to train')
