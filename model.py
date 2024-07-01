@@ -471,28 +471,30 @@ class T5DenseGatedActDense(nn.Module):
     def forward(self, hidden_states):
         # Compute gate values
         gate_values = self.gate(hidden_states)
-        gate_probabilities = F.softmax(gate_values, dim=-1)
-        # print("gate_probabilities: ", gate_probabilities)
-
+        
         # Get top-2 experts
-        top2_experts = torch.topk(gate_probabilities, 2, dim=-1).indices
-        # print("top2_experts: ", top2_experts)
+        gate_probabilities , top_k_indices = torch.topk(gate_values, 2, dim=-1)
+        # print("gate_probabilities: ", gate_probabilities)
+        gate_probabilities = F.softmax(gate_probabilities, dim=-1)
+        print("gate_probabilities: ", gate_probabilities[0][0])
+        print("top_k_indices: ", top_k_indices[0][0])
+        # print("gate_probabilities ", gate_probabilities.shape)
+        # print("hidden_states: ", hidden_states.shape)
 
         # Calculate the output of the top-2 experts
         outputs = torch.stack([self.experts[i](hidden_states) for i in range(self.num_experts)], dim=-1)
-
-        # Gather outputs from the top-2 experts
+        # print("outputs: ", outputs.shape)
         batch_size, seq_len, hidden_dim, _ = outputs.shape
-        top2_experts_expanded = top2_experts.unsqueeze(-1).expand(batch_size, seq_len, 2, hidden_dim)
+        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, 2, hidden_dim)
         top2_outputs = torch.gather(outputs, -1, top2_experts_expanded).permute(0, 1, 3, 2)
-        # print("top2_outputs: ", top2_outputs)
+        # print("top_k_indices: ", top2_experts_expanded.shape)
+        # print("top2_outputs: ", top2_outputs.shape)
 
-        # Combine the outputs from the top-2 experts
-        top2_probabilities = torch.gather(gate_probabilities, -1, top2_experts)
-        top2_probabilities = top2_probabilities / top2_probabilities.sum(dim=-1, keepdim=True)
-        # print("top2_probabilities: ", top2_probabilities)
-        output = torch.sum(top2_outputs * top2_probabilities.unsqueeze(-2), dim=-1)
+         # Combine the outputs from the top-2 experts
+        output = torch.sum(top2_outputs * gate_probabilities.unsqueeze(-2), dim=-1)
         hidden_states = self.dropout(output)
+        # print("output: ", output.shape)
+        # input("Stoppp")
 
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
@@ -1355,7 +1357,7 @@ class T5SC_model(T5PreTrainedModel):
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
             if self.training:
-                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
+                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             else:
                 loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
