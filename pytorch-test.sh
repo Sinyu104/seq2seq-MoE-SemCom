@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --gres=gpu:p100:1       # Request GPU "generic resources"
 #SBATCH --cpus-per-task=6  # Cores proportional to GPUs: 6 on Cedar, 16 on Graham.
-#SBATCH --mem=16000M       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
-#SBATCH --time=2-00:00
+#SBATCH --mem=12000M       # Memory proportional to GPUs: 32000 Cedar, 64000 Graham.
+#SBATCH --time=0-01:00
 #SBATCH --output=%N-%j.out
 
 

@@ -1355,7 +1355,7 @@ class T5SC_model(T5PreTrainedModel):
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
             if self.training:
-                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
+                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             else:
                 loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
