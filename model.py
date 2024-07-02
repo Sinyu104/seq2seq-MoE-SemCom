@@ -216,7 +216,7 @@ class info_mask_gen(nn.Module):
         self.l2 = nn.Linear(embed_dim // 2, embed_dim // 4, bias=False)
         self.l3 = nn.Linear(embed_dim // 4, 2, bias=False)
         self.act = nn.GELU()
-        self.logSoftmax = nn.LogSoftmax(dim=-1)
+        self.logSoftmax = nn.Softmax(dim=-1)
     
 
 
@@ -225,8 +225,11 @@ class info_mask_gen(nn.Module):
         bert_embedding = bert_outputs.last_hidden_state
         x = self.norm(bert_embedding) 
         x = self.act(self.L(x))
+        # print("L weight: ", self.L.weight)
         # print("l1 weight: ", self.l1.weight)
         # print("l2 weight: ", self.l2.weight)
+        
+
         # B, N, C = x.size()
         # local_x = x[:,:, :C//2]
         # global_x = (x[:,:, C//2:] * policy).sum(dim=1, keepdim=True) / torch.sum(policy, dim=1, keepdim=True)
@@ -250,16 +253,27 @@ class infoFSM(nn.Module):
         
     def forward(self, input_feature, attention_mask, prev_m): 
         batch_size = input_feature.shape[0]
-        prob = self.mask_generator(input_feature, attention_mask).reshape(batch_size, -1, 2)  # Z^g Z^l Z^c
+        prob = self.mask_generator(input_feature, attention_mask)  # Z^g Z^l Z^c
+        
         # print("Prob shape: ", prob.shape)
+        # print("prob: ", prob)
         # print("Gumble_softmax: ", F.gumbel_softmax(prob, hard=True))
         # print("Input feature: ", input_feature)
         # print("input feature shape: ", input_feature.shape)
         # print("Is it training? ", self.training)
-        # input("pause")
+        
         if self.training:
-            curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1].squeeze() * prev_m
-            input_feature = input_feature * curr_m.unsqueeze(-1) 
+            # curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0].squeeze() * prev_m
+            curr_m = prob[:, :, 0]*prev_m+1e-10
+            print("curr_m: ", curr_m[0])
+            # print(" prev_m: ",  prev_m.shape)
+            # print("input_feature shape: ", input_feature.shape)
+            curr_mm = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            input_feature = input_feature * curr_mm
+            # print("input_feature: ", input_feature)
+            # print("input_feature: ", input_feature.shape)
+            # input("pause")
+            
             # curr_m = curr_m.squeeze() * prev_m
             # curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1] 
             # curr_m = curr_m.squeeze()*prev_m
@@ -290,7 +304,7 @@ class infoFSM(nn.Module):
             #     new_tensor[idx, :row] = torch.tensor(1,dtype=torch.int)
             # # print("curr_m: ", new_tensor[0])
             # # print("input_f: ", input_feature[0])
-            return input_feature, curr_m.long(), curr_m
+            return input_feature, attention_mask, curr_m
         else:
             curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1]
             curr_m = curr_m.squeeze()*prev_m
@@ -964,9 +978,10 @@ class T5Stack(T5PreTrainedModel):
                     # hidden_states = hidden_states * curr_m.unsqueeze(-1)
                     input_shape = hidden_states.size()[:-1]
                     extended_attention_mask = self.get_extended_attention_mask(mask_dict_, input_shape)
-                    compression_rate_group = compression_rate_group + (torch.sum(curr_m, dim = 1),)
+                    compression_rate_group = compression_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
                     mask_dict = mask_dict + (mask_dict_,)
                     compression_rates = compression_rate_group[-1]
+                    print("compression_rates: ", compression_rates)
                     # print("origianl length: ", torch.mean(compression_rate_group[0].float()))
                     # print("compression rates: ", torch.mean(compression_rates))
                 else:
@@ -1305,7 +1320,7 @@ class T5SC_model(T5PreTrainedModel):
                 inputs_embeds=decoder_inputs_embeds,
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
-                encoder_attention_mask=mask_dict,
+                encoder_attention_mask=attention_mask,
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
                 use_cache=use_cache,

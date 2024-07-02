@@ -10,6 +10,7 @@ import sys
 import time
 import datetime
 from config import T5SC_config
+torch.set_printoptions(threshold=10_000)
 from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
 
 
