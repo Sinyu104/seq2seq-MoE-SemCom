@@ -113,14 +113,14 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
         # print("CR task: ", task, cr[task], "task batch: ", task_batch[task])
         
         loss_scaler(i, loss, optimizer)
-        if (i + 1) % accumulation_steps != 0:
-            optimizer.step()
-            optimizer.zero_grad()
+        
 
         total_loss += loss.item()
         if i % print_freq == 0:
             print('[Batch: %d/%d] [loss: %f] [compression rate: %f]' %(i+1, len(dataloader), total_loss/task_batch[task], cr[task]/task_batch[task]))
-    
+    # if (i + 1) % accumulation_steps != 0:
+    #     optimizer.step()
+    #     optimizer.zero_grad()
     avg_cr = {task: cr[task]/task_batch[task] for task in args.train_task}
         
     avg_train_loss = total_loss / len(dataloader)
