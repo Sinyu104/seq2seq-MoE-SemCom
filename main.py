@@ -38,7 +38,7 @@ def main(args):
         target_modules=["q", "v","query","key"],
         lora_dropout=0.05,
         bias="none",
-        modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts.0","DenseReluDense.experts.1","DenseReluDense.experts.2","mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
+        modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts_0.0","DenseReluDense.experts_0.1","DenseReluDense.experts_0.2","DenseReluDense.experts_1.0","DenseReluDense.experts_1.1","DenseReluDense.experts_1.2", "mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
         )
     # add LoRA adaptor
     model = get_peft_model(model, lora_config)
