@@ -17,7 +17,7 @@ class IWSLT(Dataset):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading IWSLT Books dataset")
-        books = load_dataset("iwslt2017", "iwslt2017-en-fr")
+        books = load_dataset("iwslt2017", "iwslt2017-en-fr",trust_remote_code=True)
         if train:
             self.opus = books["train"]['translation'][:15000]
             

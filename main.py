@@ -11,7 +11,7 @@ import time
 import datetime
 from config import T5SC_config
 torch.set_printoptions(threshold=10_000)
-from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
+from peft import LoraConfig, get_peft_model, TaskType
 
 
 def seed_inital(seed=0):
@@ -52,13 +52,13 @@ def main(args):
 
     #### Get the data and dataloader
     trainset = build_dataset(is_train=True, args=args)
-    trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=1, pin_memory=True,
+    trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=0, pin_memory=True,
                                                 batch_size=args.batch_size, shuffle=False,
                                                 drop_last = True)
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
-    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=1, pin_memory=True,
+    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
                                                 batch_size=args.batch_size, shuffle=False, drop_last = True)  
                                                 for task in args.test_task}
     loss_scaler = NativeScaler()
@@ -87,12 +87,12 @@ def main(args):
     for epoch in range(args.epochs):
         train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, loss_scaler = loss_scaler, device=device, mode='info')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
-        # if epoch%3==0:
-        #     test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
-            # save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
-        # print("On average: ")
-        # for task in args.test_task:
-        #     print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
+        if epoch%3==0:
+            test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
+            save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
+        print("On average: ")
+        for task in args.test_task:
+            print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
         print(f'Epoch {epoch+1}, Learning Rate: {scheduler.get_last_lr()}')
         scheduler.step()
     test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
