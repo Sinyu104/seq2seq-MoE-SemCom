@@ -51,13 +51,13 @@ def main(args):
 
     #### Get the data and dataloader
     trainset = build_dataset(is_train=True, args=args)
-    trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=1, pin_memory=True,
+    trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=0, pin_memory=True,
                                                 batch_size=args.batch_size, shuffle=False,
                                                 drop_last = True)
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
-    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=1, pin_memory=True,
+    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
                                                 batch_size=args.batch_size, shuffle=False, drop_last = True)  
                                                 for task in args.test_task}
     loss_scaler = NativeScaler()

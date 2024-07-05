@@ -131,6 +131,8 @@ def task_metrics_mapping(args):
             metrics['trans'] = load("sacrebleu")
         elif task.lower() == 'qa':
             metrics['qa'] = load("rouge")
+        elif task.lower() == 'mmlu':
+            metrics['mmlu'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
