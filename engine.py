@@ -2,6 +2,7 @@ import torch
 from utils import task_metrics_mapping
 from transformers import AutoTokenizer
 from torch.cuda.amp import autocast
+from dataset.MMLU import subcategories, categories
 
 
 
@@ -79,13 +80,33 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         total['qa'] += 1
                     if batch_idx % print_freq == 0:
                         print('[QA] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['qa'].dataset), scores['qa']/total['qa']))# , cr['qa']/cr_batch['qa']
+        elif task.lower() == 'mmlu':
+            for batch_idx, data in enumerate(testloader['mmlu']):
+                    texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
+                    targets = data[1].squeeze().to(device, non_blocking=True)
+                    batch_size = targets.shape[0]
+                    # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    # cr['qa'] += compression_rate.item()
+                    # cr_batch['qa'] += 1
+                    outputs = model.generate(input_ids=texts, attention_mask=masks)
+                    for ii in range(batch_size):
+                        predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
+                        # print("predicted: ", predicted)
+                        labels = tokenizer.decode(targets[ii], skip_special_tokens=True)
+                        # print("labels: ", labels)
+                        result = metrics['mmlu'].compute(predictions=[predicted], references=[[labels]])
+                        # print("Result: ", result['rouge1'])
+                        # input("Predict")
+                        scores['mmlu'] += result["exact_match"]
+                        total['mmlu'] += 1
+                    if batch_idx % print_freq == 0:
+                        print('[MMLU] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['mmlu'].dataset), scores['mmlu']/total['mmlu']))# , cr['qa']/cr_batch['qa']
         else:
             raise NotImplementedError
     for task in args.test_task:
         final['score'][task] = scores[task]/total[task]
         # final['compression rate'][task] = cr[task]/cr_batch[task]
     return final
-
 
 def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_freq=20, accumulation_steps=1):
     total_loss = 0.0
@@ -94,17 +115,14 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
     model.train()
     optimizer.zero_grad()
     for i, data_batch in enumerate(dataloader):
-        
         texts, masks = data_batch[0]['input_ids'].squeeze().to(device), data_batch[0]['attention_mask'].squeeze().to(device)
         targets = data_batch[1].squeeze().to(device)
         task = data_batch[2][0]
 
         batch_size = targets.shape[0]
 
-        
         with autocast(enabled=False):
             outputs = model(input_ids=texts, attention_mask=masks, labels=targets, mode=mode, task=task)
-        
             loss = outputs.loss
         
         compression_rate = outputs.compression_rate

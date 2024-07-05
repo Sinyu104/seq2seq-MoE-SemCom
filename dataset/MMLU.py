@@ -1,9 +1,10 @@
+from datasets import Dataset as DS
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
-from datasets import load_dataset
 from loguru import logger
 from collections import defaultdict
-
+import pandas as pd
+import os
 
 subcategories = {
     "abstract_algebra": ["math"],
@@ -81,64 +82,78 @@ def format_subject(subject):
 
 
 def format_example(df, include_answer=True):
-    choices = df['choices']
-    prompt = df['question']
-    k = len(choices)
+    prompt = df[0]
+    options = 4
     prompt += "\nOPTIONS:"
-    for j in range(k):
-        prompt += "\n{}".format(choices[j])
+    for j in range(options):
+        prompt += "\n{}".format(df[j+1])
     prompt += "\nAnswer:"
     if include_answer:
-        prompt += " {}".format(df['answer'])
+        prompt += " {}".format(df[-1])
     return prompt
 
 
-def gen_prompt(train_df):
-    subject = train_df[0]['subject']
+def gen_prompt(subject):
     prompt = "Please answer the multiple choice questions about {}.\n".format(
         format_subject(subject)
     )
     return prompt
 
-def def_value():
-    return "Not Present"
+
 class MMLU(Dataset):
-    def __init__(self, train=True, idx = 0):
+    def __init__(self, train=True):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading MMLU dataset")
-        ds = load_dataset("cais/mmlu", "all")
+        subjects = list(subcategories.keys())
         
         if train:
-            self.mmlu = ds["dev"]
-            
+            self.mmlu = []
+            self.data = []
+            for subject in subjects:
+                file_path = os.path.join("dataset\\MMLU_data", "dev", subject + "_dev.csv")
+                df = pd.read_csv(file_path, header=None)
+                self.mmlu.append(df)
+                prompt = gen_prompt(subject)
+                for index, example in df.iterrows():
+                    input_text = prompt+format_example(example, include_answer=False)
+                    inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
+                    labels = tokenizer(str(example[5]), padding='max_length', max_length=8, return_tensors="pt").input_ids
+                    labels[labels == tokenizer.pad_token_id] = -100
+                    self.data.append((inputs, labels))
+            self.mmlu = pd.concat(self.mmlu, ignore_index=True)
+            self.mmlu =DS.from_pandas(self.mmlu)
+
+              
         else:
-            self.mmlu = ds["test"]
-        subjects = list(subcategories.keys())
-        self.df = defaultdict(list)
+            self.mmlu = []
+            self.data = defaultdict(list)
+            for subject in subjects:
+                file_path = os.path.join("dataset\\MMLU_data", "test", subject + "_test.csv")
+                df = pd.read_csv(file_path, header=None)
+                prompt = gen_prompt(subject)
+                for index, example in df.iterrows():
+                    input_text = prompt+format_example(example, include_answer=False)
+                    inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
+                    labels = tokenizer(str(example[5]), padding='max_length', max_length=8, return_tensors="pt").input_ids
+                    labels[labels == tokenizer.pad_token_id] = -100
+                    self.data[subject].append((inputs, labels))
+                self.mmlu.append(df)
+            self.mmlu = pd.concat(self.mmlu, ignore_index=True)
+            self.mmlu.sample(n=1000)
+            self.mmlu =DS.from_pandas(self.mmlu)
         
-        for example in self.mmlu:
-            self.df[example['subject']].append(example)
-        self.data = {subject: [] for subject in subjects}
-        for subject in subjects:
-            prompt = gen_prompt(self.df[subject])
-            for example in self.df[subject]:
-                input_text = prompt+format_example(example, include_answer=False)
-                inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
-                self.data[subject].append((inputs, tokenizer(str(example['answer']), return_tensors="pt").input_ids))
-        
-                
-                
+            
     def __len__(self):
-        return sum(len(examples) for examples in self.data.values())
+        return len(self.data)
 
     def __getitem__(self, index):
-        subject, idx = index
-        sentence, target = self.data[subject][idx]
-        return sentence, target , subject
+        if type(index)==int:
+            sentence, target = self.data[index]
+        else:
+            subject, idx = index
+            sentence, target = self.data[subject][idx]
+        return sentence, target , 'mmlu'
     
-c = MMLU()
-print(len(c))
-print(c[('clinical_knowledge',1)])
 
 
