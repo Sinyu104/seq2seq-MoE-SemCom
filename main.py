@@ -11,6 +11,7 @@ import time
 import datetime
 from config import T5SC_config
 from peft import LoraConfig, get_peft_model, TaskType
+from dataset.MMLU import subcategories
 
 
 def seed_inital(seed=0):
@@ -38,7 +39,7 @@ def main(args):
         target_modules=["q", "v","query","key"],
         lora_dropout=0.05,
         bias="none",
-        modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts.0","DenseReluDense.experts.1","DenseReluDense.experts.2","mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
+        modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts_0.0","DenseReluDense.experts_0.1","DenseReluDense.experts_0.2","DenseReluDense.experts_1.0","DenseReluDense.experts_1.1","DenseReluDense.experts_1.2", "mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
         )
     # add LoRA adaptor
     model = get_peft_model(model, lora_config)
@@ -51,15 +52,23 @@ def main(args):
 
     #### Get the data and dataloader
     trainset = build_dataset(is_train=True, args=args)
-    trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=1, pin_memory=True,
+    trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=0, pin_memory=True,
                                                 batch_size=args.batch_size, shuffle=False,
                                                 drop_last = True)
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
-    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=1, pin_memory=True,
-                                                batch_size=args.batch_size, shuffle=False, drop_last = True)  
-                                                for task in args.test_task}
+    for task in args.test_task:
+        testloader = {}
+        if task == 'mmlu':
+            subjects = list(subcategories.keys())
+            temploader = {subject: torch.utils.data.DataLoader(dataset=testset[task][subject], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)
+                                                        for subject in subjects}
+            testloader[task]=temploader
+        else:
+            testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)}
     loss_scaler = NativeScaler()
     
     if args.eval:

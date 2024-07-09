@@ -452,7 +452,9 @@ def batch_index_select(x, idx):
         
 
 #         hidden_states = self.wo(hidden_states)
-#         return hidden_states
+#         sparsity_loss = 0
+
+#         return hidden_states, sparsity_loss
 
 class T5DenseGatedActDense(nn.Module):
     def __init__(self, config: T5SC_config, num_experts=3):
@@ -460,11 +462,13 @@ class T5DenseGatedActDense(nn.Module):
         self.num_experts = num_experts
         self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.experts = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
+        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.experts_1 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
+        self.experts_0 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
-        self.sparsity_weight =1e-2
+        self.sparsity_weight =1
         # print(self.experts[0].weight)
         # print(self.experts[1].weight)
 
@@ -476,22 +480,27 @@ class T5DenseGatedActDense(nn.Module):
         gate_probabilities , top_k_indices = torch.topk(gate_values, 2, dim=-1)
         # print("gate_probabilities: ", gate_probabilities)
         gate_probabilities = F.softmax(gate_probabilities, dim=-1)
-        print("gate_probabilities: ", gate_probabilities[0][0])
-        print("top_k_indices: ", top_k_indices[0][0])
+        # print("gate_probabilities: ", gate_probabilities[0][0])
+        # print("top_k_indices: ", top_k_indices)
         # print("gate_probabilities ", gate_probabilities.shape)
         # print("hidden_states: ", hidden_states.shape)
 
         # Calculate the output of the top-2 experts
-        outputs = torch.stack([self.experts[i](hidden_states) for i in range(self.num_experts)], dim=-1)
+        outputs = torch.stack([self.act(self.experts_0[i](hidden_states))*self.experts_1[i](hidden_states) for i in range(self.num_experts)], dim=-1)
+        # print("outputs: ", outputs[0])
         # print("outputs: ", outputs.shape)
         batch_size, seq_len, hidden_dim, _ = outputs.shape
-        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, 2, hidden_dim)
-        top2_outputs = torch.gather(outputs, -1, top2_experts_expanded).permute(0, 1, 3, 2)
-        # print("top_k_indices: ", top2_experts_expanded.shape)
+        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, 2, hidden_dim).permute(0, 1, 3, 2)
+        top2_outputs = torch.gather(outputs, -1, top2_experts_expanded)
+        # print("top2_experts_expanded: ", top2_experts_expanded.shape)
+        # print("top2_experts_expanded: ", top2_experts_expanded)
         # print("top2_outputs: ", top2_outputs.shape)
+        # print("top2_outputs: ", top2_outputs[0])
 
          # Combine the outputs from the top-2 experts
         output = torch.sum(top2_outputs * gate_probabilities.unsqueeze(-2), dim=-1)
+        # print("output shape: ", output.shape)
+        # print("output: ", output[0])
         hidden_states = self.dropout(output)
         # print("output: ", output.shape)
         # input("Stoppp")
@@ -511,7 +520,6 @@ class T5DenseGatedActDense(nn.Module):
 
         # Compute sparsity regularization term
         sparsity_loss = self.sparsity_regularization(gate_probabilities)
-
         return hidden_states, sparsity_loss
 
     def sparsity_regularization(self, gate_probabilities):
@@ -1096,8 +1104,11 @@ class T5SC_model(T5PreTrainedModel):
                 nn.init.xavier_uniform_(module.weight)
                 # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
             elif isinstance(module, T5DenseGatedActDense):
-                for layer in module.experts:
+                for layer in module.experts_0:
+                    layer.weight.data.copy_(module.wi_0.weight.data)
+                for layer in module.experts_1:
                     layer.weight.data.copy_(module.wi_1.weight.data)
+                
             elif ('lora_B' in name) and isinstance(module, nn.Linear):
                 init.uniform_(module.weight, a=-0.01, b=0.01)
             elif 'FSMs' in name and isinstance(module, nn.LayerNorm):
@@ -1357,7 +1368,7 @@ class T5SC_model(T5PreTrainedModel):
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
             if self.training:
-                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) 
             else:
                 loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
