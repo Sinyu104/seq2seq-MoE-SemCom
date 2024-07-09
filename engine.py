@@ -2,7 +2,8 @@ import torch
 from utils import task_metrics_mapping
 from transformers import AutoTokenizer
 from torch.cuda.amp import autocast
-from dataset.MMLU import subcategories, categories
+from dataset.MMLU import subcategories
+import numpy as np
 
 
 
@@ -81,26 +82,49 @@ def evaluate(args, model, testloader, device, print_freq=10):
                     if batch_idx % print_freq == 0:
                         print('[QA] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['qa'].dataset), scores['qa']/total['qa']))# , cr['qa']/cr_batch['qa']
         elif task.lower() == 'mmlu':
-            for batch_idx, data in enumerate(testloader['mmlu']):
+            subjects = list(subcategories.keys())
+            for subject in subjects:
+                for batch_idx, data in enumerate(testloader['mmlu'][subject]):
                     texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
                     targets = data[1].squeeze().to(device, non_blocking=True)
                     batch_size = targets.shape[0]
+                    labels = []
+                    for token_ids in targets:
+                        labels.append(tokenizer.decode(token_ids, skip_special_tokens=True))
                     # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
                     # cr['qa'] += compression_rate.item()
                     # cr_batch['qa'] += 1
-                    outputs = model.generate(input_ids=texts, attention_mask=masks)
-                    for ii in range(batch_size):
-                        predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
-                        # print("predicted: ", predicted)
-                        labels = tokenizer.decode(targets[ii], skip_special_tokens=True)
-                        # print("labels: ", labels)
-                        result = metrics['mmlu'].compute(predictions=[predicted], references=[[labels]])
-                        # print("Result: ", result['rouge1'])
-                        # input("Predict")
-                        scores['mmlu'] += result["exact_match"]
-                        total['mmlu'] += 1
+                    decoder_input_ids = tokenizer("", return_tensors="pt").input_ids.expand(batch_size, 1).to(device)
+                    decoder_input_ids = model._shift_right(decoder_input_ids)
+                    logits = model(
+                        input_ids=texts, decoder_input_ids=decoder_input_ids
+                    ).logits
+                    probs = (
+                        torch.nn.functional.softmax(
+                            torch.index_select(
+                                logits, 2,
+                                torch.tensor(
+                                    [
+                                        tokenizer("A").input_ids[0],
+                                        tokenizer("B").input_ids[0],
+                                        tokenizer("C").input_ids[0],
+                                        tokenizer("D").input_ids[0],
+                                    ]
+                                ).to(device)
+                                
+                            ),
+                            dim=2,
+                        )
+                    )
+                    max_indices = torch.argmax(probs, dim=2).squeeze().cpu().numpy().tolist()
+                    predicted_labels = [["A", "B", "C", "D"][index] for index in max_indices]
+                    
+
+                    result = metrics['mmlu'].compute(predictions=predicted_labels, references=labels)
+                    scores['mmlu'] += result["exact_match"]
+                    total['mmlu'] += 1
                     if batch_idx % print_freq == 0:
-                        print('[MMLU] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['mmlu'].dataset), scores['mmlu']/total['mmlu']))# , cr['qa']/cr_batch['qa']
+                        print('[MMLU][%s] Test %d/%d: [score: %f] ' %(subject, batch_idx*batch_size, len(testloader['mmlu'][subject].dataset), scores['mmlu']/total['mmlu']))# , cr['qa']/cr_batch['qa']
         else:
             raise NotImplementedError
     for task in args.test_task:

@@ -11,6 +11,7 @@ import time
 import datetime
 from config import T5SC_config
 from peft import LoraConfig, get_peft_model, TaskType
+from dataset.MMLU import subcategories
 
 
 def seed_inital(seed=0):
@@ -57,9 +58,17 @@ def main(args):
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
-    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
-                                                batch_size=args.batch_size, shuffle=False, drop_last = True)  
-                                                for task in args.test_task}
+    for task in args.test_task:
+        testloader = {}
+        if task == 'mmlu':
+            subjects = list(subcategories.keys())
+            temploader = {subject: torch.utils.data.DataLoader(dataset=testset[task][subject], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)
+                                                        for subject in subjects}
+            testloader[task]=temploader
+        else:
+            testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)}
     loss_scaler = NativeScaler()
     
     if args.eval:

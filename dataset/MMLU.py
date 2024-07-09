@@ -105,13 +105,13 @@ class MMLU(Dataset):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading MMLU dataset")
-        subjects = list(subcategories.keys())
+        self.subjects = list(subcategories.keys())
         
         if train:
             self.mmlu = []
             self.data = []
-            for subject in subjects:
-                file_path = os.path.join("dataset\\MMLU_data", "dev", subject + "_dev.csv")
+            for subject in self.subjects:
+                file_path = os.path.join("dataset","MMLU_data", "dev", subject + "_dev.csv")
                 df = pd.read_csv(file_path, header=None)
                 self.mmlu.append(df)
                 prompt = gen_prompt(subject)
@@ -128,15 +128,14 @@ class MMLU(Dataset):
         else:
             self.mmlu = []
             self.data = defaultdict(list)
-            for subject in subjects:
-                file_path = os.path.join("dataset\\MMLU_data", "test", subject + "_test.csv")
+            for subject in self.subjects:
+                file_path = os.path.join("dataset", "MMLU_data", "test", subject + "_test.csv")
                 df = pd.read_csv(file_path, header=None)
                 prompt = gen_prompt(subject)
                 for index, example in df.iterrows():
                     input_text = prompt+format_example(example, include_answer=False)
                     inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
                     labels = tokenizer(str(example[5]), padding='max_length', max_length=8, return_tensors="pt").input_ids
-                    labels[labels == tokenizer.pad_token_id] = -100
                     self.data[subject].append((inputs, labels))
                 self.mmlu.append(df)
             self.mmlu = pd.concat(self.mmlu, ignore_index=True)
@@ -145,15 +144,18 @@ class MMLU(Dataset):
         
             
     def __len__(self):
-        return len(self.data)
+        if type(self.data)==list:
+            return len(self.data)
+        else:
+            return sum(len(self.data[subject]) for subject in self.subjects)
 
     def __getitem__(self, index):
         if type(index)==int:
             sentence, target = self.data[index]
+            return sentence, target , 'mmlu'
         else:
-            subject, idx = index
-            sentence, target = self.data[subject][idx]
-        return sentence, target , 'mmlu'
+            return self.data[index]
+        
     
 
 
