@@ -83,10 +83,13 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         print('[QA] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['qa'].dataset), scores['qa']/total['qa']))# , cr['qa']/cr_batch['qa']
         elif task.lower() == 'mmlu':
             subjects = list(subcategories.keys())
+            score_per_subject = {subject: 0 for subject in subjects}
+            batch_per_subject = {subject: 0 for subject in subjects}
             for subject in subjects:
                 for batch_idx, data in enumerate(testloader['mmlu'][subject]):
-                    texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
-                    targets = data[1].squeeze().to(device, non_blocking=True)
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
                     batch_size = targets.shape[0]
                     labels = []
                     for token_ids in targets:
@@ -116,15 +119,19 @@ def evaluate(args, model, testloader, device, print_freq=10):
                             dim=2,
                         )
                     )
-                    max_indices = torch.argmax(probs, dim=2).squeeze().cpu().numpy().tolist()
+                    max_indices = torch.argmax(probs, dim=2).squeeze().cpu().numpy().tolist() 
+                    max_indices = max_indices if isinstance(max_indices,list) else [max_indices]
                     predicted_labels = [["A", "B", "C", "D"][index] for index in max_indices]
                     
 
                     result = metrics['mmlu'].compute(predictions=predicted_labels, references=labels)
                     scores['mmlu'] += result["exact_match"]
                     total['mmlu'] += 1
+                    score_per_subject[subject] += result["exact_match"]
+                    batch_per_subject[subject] += 1
                     if batch_idx % print_freq == 0:
-                        print('[MMLU][%s] Test %d/%d: [score: %f] ' %(subject, batch_idx*batch_size, len(testloader['mmlu'][subject].dataset), scores['mmlu']/total['mmlu']))# , cr['qa']/cr_batch['qa']
+                        print('[MMLU][%s] Test %d/%d: [score: %f] ' %(subject, batch_idx*batch_size, len(testloader['mmlu'][subject].dataset), score_per_subject[subject]/batch_per_subject[subject]))# , cr['qa']/cr_batch['qa']
+            print('[MMLU][Average] Test %d subjects: [score: %f] ' %( len(subjects), scores['mmlu']/total['mmlu']))
         else:
             raise NotImplementedError
     for task in args.test_task:

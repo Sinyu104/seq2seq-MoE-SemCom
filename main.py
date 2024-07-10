@@ -58,8 +58,8 @@ def main(args):
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
+    testloader = {}
     for task in args.test_task:
-        testloader = {}
         if task == 'mmlu':
             subjects = list(subcategories.keys())
             temploader = {subject: torch.utils.data.DataLoader(dataset=testset[task][subject], num_workers=0, pin_memory=True,
@@ -67,8 +67,8 @@ def main(args):
                                                         for subject in subjects}
             testloader[task]=temploader
         else:
-            testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
-                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)}
+            testloader[task] = torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)
     loss_scaler = NativeScaler()
     
     if args.eval:
@@ -98,9 +98,9 @@ def main(args):
         if epoch%3==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
             # save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
-        print("On average: ")
-        for task in args.test_task:
-            print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
+        # print("On average: ")
+        # for task in args.test_task:
+        #     print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
         print(f'Epoch {epoch+1}, Learning Rate: {scheduler.get_last_lr()}')
         scheduler.step()
     save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
