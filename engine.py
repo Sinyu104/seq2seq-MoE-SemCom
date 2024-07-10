@@ -22,8 +22,8 @@ def evaluate(args, model, testloader, device, print_freq=10):
         if task.lower() == 'sen':
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader['sen']):
-                    texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
-                    targets = data[1].squeeze().to(device, non_blocking=True)
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
                     batch_size = targets.shape[0]
                     # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
                     # cr['sen'] += compression_rate.item()
@@ -41,8 +41,8 @@ def evaluate(args, model, testloader, device, print_freq=10):
         elif task.lower() == 'trans':
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader['trans']):
-                    texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
-                    targets = data[1].squeeze().to(device, non_blocking=True)
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
                     batch_size = targets.shape[0]
                     # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
                     # cr['trans'] += compression_rate.item()
@@ -62,8 +62,8 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         print('[TRANS] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['trans'].dataset), scores['trans']/total['trans']))# , cr['trans']/cr_batch['trans']
         elif task.lower() == 'qa':
             for batch_idx, data in enumerate(testloader['qa']):
-                    texts, masks = data[0]['input_ids'].squeeze().to(device, non_blocking=True), data[0]['attention_mask'].squeeze().to(device, non_blocking=True)
-                    targets = data[1].squeeze().to(device, non_blocking=True)
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
                     batch_size = targets.shape[0]
                     # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
                     # cr['qa'] += compression_rate.item()
@@ -146,8 +146,8 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
     model.train()
     optimizer.zero_grad()
     for i, data_batch in enumerate(dataloader):
-        texts, masks = data_batch[0]['input_ids'].squeeze().to(device), data_batch[0]['attention_mask'].squeeze().to(device)
-        targets = data_batch[1].squeeze().to(device)
+        texts, masks = data_batch[0]['input_ids'].squeeze(1).to(device), data_batch[0]['attention_mask'].squeeze(1).to(device)
+        targets = data_batch[1].squeeze(1).to(device)
         task = data_batch[2][0]
 
         batch_size = targets.shape[0]
