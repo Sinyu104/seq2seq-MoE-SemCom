@@ -457,7 +457,7 @@ def batch_index_select(x, idx):
 #         return hidden_states, sparsity_loss
 
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config, num_experts=1):
+    def __init__(self, config: T5SC_config, num_experts=10):
         super().__init__()
         self.num_experts = num_experts
         self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
@@ -472,12 +472,12 @@ class T5DenseGatedActDense(nn.Module):
         # print(self.experts[0].weight)
         # print(self.experts[1].weight)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, k=1):
         # Compute gate values
         gate_values = self.gate(hidden_states)
         
         # Get top-2 experts
-        gate_probabilities , top_k_indices = torch.topk(gate_values, 2, dim=-1)
+        gate_probabilities , top_k_indices = torch.topk(gate_values, k, dim=-1)
         # print("gate_probabilities: ", gate_probabilities)
         gate_probabilities = F.softmax(gate_probabilities, dim=-1)
         # print("gate_probabilities: ", gate_probabilities[0][0])
@@ -490,7 +490,7 @@ class T5DenseGatedActDense(nn.Module):
         # print("outputs: ", outputs[0])
         # print("outputs: ", outputs.shape)
         batch_size, seq_len, hidden_dim, _ = outputs.shape
-        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, 2, hidden_dim).permute(0, 1, 3, 2)
+        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, k, hidden_dim).permute(0, 1, 3, 2)
         top2_outputs = torch.gather(outputs, -1, top2_experts_expanded)
         # print("top2_experts_expanded: ", top2_experts_expanded.shape)
         # print("top2_experts_expanded: ", top2_experts_expanded)
