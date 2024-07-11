@@ -174,6 +174,27 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         total['glue_qqp'] += 1
                     if batch_idx % print_freq == 0:
                         print('[Glue/qqp] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['glue_qqp'].dataset), scores['glue_qqp']/total['glue_qqp']))# , cr['qa']/cr_batch['qa']
+        elif task.lower() == 'labeled_final':
+            for batch_idx, data in enumerate(testloader['labeled_final']):
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
+                    batch_size = targets.shape[0]
+                    # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    # cr['qa'] += compression_rate.item()
+                    # cr_batch['qa'] += 1
+                    outputs = model.generate(input_ids=texts, attention_mask=masks)
+                    for ii in range(batch_size):
+                        predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
+                        # print("predicted: ", predicted)
+                        labels = tokenizer.decode(targets[ii], skip_special_tokens=True)
+                        # print("labels: ", labels)
+                        result = metrics['labeled_final'].compute(predictions=[predicted], references=[labels])
+                        # print("Result: ", result['rouge1'])
+                        # input("Predict")
+                        scores['labeled_final'] += result["exact_match"]
+                        total['labeled_final'] += 1
+                    if batch_idx % print_freq == 0:
+                        print('[paws/labeled_final] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['labeled_final'].dataset), scores['labeled_final']/total['labeled_final']))# , cr['qa']/cr_batch['qa']
         else:
             raise NotImplementedError
     for task in args.test_task:
