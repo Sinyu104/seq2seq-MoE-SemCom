@@ -95,8 +95,8 @@ def main(args):
     for epoch in range(args.epochs):
         train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, loss_scaler = loss_scaler, device=device, mode='info')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
-        # if epoch%3==0:
-        #     test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
+        if epoch%3==0:
+            test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
             # save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
         # print("On average: ")
         # for task in args.test_task:
