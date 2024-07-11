@@ -6,7 +6,7 @@ from pathlib import Path
 import datetime
 from loguru import logger
 from model import T5SC_model
-from dataset import SST, IWSLT, SQuAD, MMLU, Glue_mrpc
+from dataset import SST, IWSLT, SQuAD, MMLU, Glue_mrpc, Glue_qqp
 from torch.utils.data import Dataset
 from evaluate import load
 from torch.cuda.amp import GradScaler
@@ -66,6 +66,9 @@ def build_dataset(is_train, args):
                     elif task.lower() == 'glue_mrpc':
                         print(f"Building dataset for Glue/mrpc task...")
                         self.Glue_mrpc = Glue_mrpc(train=is_train)
+                    elif task.lower() == 'glue_qqp':
+                        print(f"Building dataset for Glue/qqp task...")
+                        self.Glue_qqp = Glue_qqp(train=is_train)
                     else:
                         raise NotImplementedError
 
@@ -86,6 +89,9 @@ def build_dataset(is_train, args):
                     elif task.lower() == 'glue_mrpc':
                         self.glue_mrpc_len = (len(self.Glue_mrpc)//args.batch_size)*args.batch_size
                         self.length.append(('glue_mrpc', self.length[-1][1]+self.glue_mrpc_len))
+                    elif task.lower() == 'glue_qqp':
+                        self.glue_qqp_len = (len(self.Glue_qqp)//args.batch_size)*args.batch_size
+                        self.length.append(('glue_qqp', self.length[-1][1]+self.glue_qqp_len))
                     else:
                         raise NotImplementedError
                 
@@ -109,6 +115,8 @@ def build_dataset(is_train, args):
                     return self.MMLU[idx-self.length[ta-1][1]]
                 elif self.length[ta][0] == 'glue_mrpc':
                     return self.Glue_mrpc[idx-self.length[ta-1][1]]
+                elif self.length[ta][0] == 'glue_qqp':
+                    return self.Glue_qqp[idx-self.length[ta-1][1]]
                 else:
                     raise NotImplementedError
         return CombinedDataset(is_train, args)
@@ -128,6 +136,8 @@ def build_dataset(is_train, args):
                 SeperatedDataset['mmlu']=MMLU(train=is_train)
             elif task.lower() == 'glue_mrpc':
                 SeperatedDataset['glue_mrpc']=Glue_mrpc(train=is_train)
+            elif task.lower() == 'glue_qqp':
+                SeperatedDataset['glue_qqp']=Glue_qqp(train=is_train)
             else:
                 raise NotImplementedError
         return SeperatedDataset
@@ -145,6 +155,8 @@ def task_metrics_mapping(args):
             metrics['mmlu'] = load("exact_match")
         elif task.lower() == 'glue_mrpc':
             metrics['glue_mrpc'] = load("exact_match")
+        elif task.lower() == 'glue_qqp':
+            metrics['glue_qqp'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
