@@ -140,7 +140,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
                     # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
                     # cr['qa'] += compression_rate.item()
                     # cr_batch['qa'] += 1
-                    outputs = model.generate(input_ids=texts, attention_mask=masks, max_length=32)
+                    outputs = model.generate(input_ids=texts, attention_mask=masks)
                     for ii in range(batch_size):
                         predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
                         # print("predicted: ", predicted)
@@ -153,6 +153,27 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         total['glue_mrpc'] += 1
                     if batch_idx % print_freq == 0:
                         print('[Glue/mrpc] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['glue_mrpc'].dataset), scores['glue_mrpc']/total['glue_mrpc']))# , cr['qa']/cr_batch['qa']
+        elif task.lower() == 'glue_qqp':
+            for batch_idx, data in enumerate(testloader['glue_qqp']):
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
+                    batch_size = targets.shape[0]
+                    # compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    # cr['qa'] += compression_rate.item()
+                    # cr_batch['qa'] += 1
+                    outputs = model.generate(input_ids=texts, attention_mask=masks)
+                    for ii in range(batch_size):
+                        predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
+                        # print("predicted: ", predicted)
+                        labels = tokenizer.decode(targets[ii], skip_special_tokens=True)
+                        # print("labels: ", labels)
+                        result = metrics['glue_qqp'].compute(predictions=[predicted], references=[labels])
+                        # print("Result: ", result['rouge1'])
+                        # input("Predict")
+                        scores['glue_qqp'] += result["exact_match"]
+                        total['glue_qqp'] += 1
+                    if batch_idx % print_freq == 0:
+                        print('[Glue/qqp] Test %d/%d: [score: %f] ' %(batch_idx*batch_size, len(testloader['glue_qqp'].dataset), scores['glue_qqp']/total['glue_qqp']))# , cr['qa']/cr_batch['qa']
         else:
             raise NotImplementedError
     for task in args.test_task:
