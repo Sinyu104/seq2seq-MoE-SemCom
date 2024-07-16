@@ -280,9 +280,9 @@ class infoFSM(nn.Module):
         
         if self.training:
             # curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0].squeeze() * prev_m
-            curr_m = prob.squeeze(-1)*prev_m+1e-10
+            curr_m = prob.squeeze(-1)*prev_m
             curr_m = self.STE(curr_m)
-            
+            curr_m = curr_m+1e-10
             # print("input_feature shape: ", input_feature.shape)
             mask = curr_m.int()
             curr_m = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
@@ -1365,17 +1365,17 @@ class T5SC_model(T5PreTrainedModel):
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             if task == 'sen':
-                loss =  1e5*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))# +1e-7*torch.mean(compression_rate)#+1e-6*torch.mean(confidence_rate)
+                loss =  1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 0.0)+5*torch.mean(compression_rate)#+1e-6*torch.mean(confidence_rate)
             elif task == 'trans':
                 loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.9, 0.0)+1*torch.mean(compression_rate)
                 # loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.0, 0.0)#+1e-3*torch.mean(compression_rate)
             else:
                 loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.7, 0.0)+1e-1*torch.mean(compression_rate)
-            print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
-            print("Loss from compression: ", torch.mean(compression_rate))
-            print("Loss from confidence: ", torch.mean(confidence_rate))
+            # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
+            # print("Loss from compression: ", torch.mean(compression_rate))
+            # print("Loss from confidence: ", torch.mean(confidence_rate))
             # print("Loss from codebook: ", 1e3*codebook_loss)
-            print("Final loss: ", loss)
+            # print("Final loss: ", loss)
             # input("Pausezzz")
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
         # output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs

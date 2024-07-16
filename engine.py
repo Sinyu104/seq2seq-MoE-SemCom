@@ -94,7 +94,7 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
     model.train()
     optimizer.zero_grad()
     running_loss = torch.tensor(0.0).to(device)
-    collect_loss = []
+
     for i, data_batch in enumerate(dataloader):
         
         texts, masks = data_batch[0]['input_ids'].squeeze().to(device), data_batch[0]['attention_mask'].squeeze().to(device)
@@ -121,14 +121,14 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
         optimizer.zero_grad()
         
         task_loss[task] += loss.item()
-        collect_loss.append(compression_rate.item())
+
         if (i + 1) % accumulation_steps != 0:
             running_loss += loss
         else:
             running_loss = torch.tensor(0.0).to(device)
         if (i + 1) % print_freq == 0:
             print('[Batch: %d/%d] [loss: %f] [compression rate: %f]' %(i+1, len(dataloader), task_loss[task]/task_batch[task], cr[task]/task_batch[task]))
-            print("loss history: ", collect_loss)
+
     if (i + 1) % accumulation_steps != 0:
         optimizer.step()
         optimizer.zero_grad()
