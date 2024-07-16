@@ -1,4 +1,5 @@
 __pycache__/
 dataset/__pycache__/
+dataset/MMLU/
 test.py
 LLMSC
