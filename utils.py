@@ -6,7 +6,7 @@ from pathlib import Path
 import datetime
 from loguru import logger
 from model import T5SC_model
-from dataset import SST, IWSLT, SQuAD, MMLU, Glue_mrpc, Glue_qqp, labeled_final
+from dataset import SST, IWSLT, SQuAD, MMLU, Glue_mrpc, Glue_qqp, labeled_final, Anli
 from torch.utils.data import Dataset
 from evaluate import load
 from torch.cuda.amp import GradScaler
@@ -72,6 +72,9 @@ def build_dataset(is_train, args):
                     elif task.lower() == 'labeled_final':
                         print(f"Building dataset for paws/labeled_final task...")
                         self.labeled_final = labeled_final(train=is_train)
+                    elif task.lower() == 'anli':
+                        print(f"Building dataset for facebook/anli task...")
+                        self.Anli = Anli(train=is_train)
                     else:
                         raise NotImplementedError
 
@@ -98,6 +101,10 @@ def build_dataset(is_train, args):
                     elif task.lower() == 'labeled_final':
                         self.labeled_final_len = (len(self.labeled_final)//args.batch_size)*args.batch_size
                         self.length.append(('labeled_final', self.length[-1][1]+self.labeled_final_len))
+                    elif task.lower() == 'anli':
+                        self.anli_len = (len(self.Anli)//args.batch_size)*args.batch_size
+                        self.length.append(('anli', self.length[-1][1]+self.anli_len))
+                        
                     else:
                         raise NotImplementedError
                 
@@ -125,6 +132,8 @@ def build_dataset(is_train, args):
                     return self.Glue_qqp[idx-self.length[ta-1][1]]
                 elif self.length[ta][0] == 'labeled_final':
                     return self.labeled_final[idx-self.length[ta-1][1]]
+                elif self.length[ta][0] == 'anli':
+                    return self.Anli[idx-self.length[ta-1][1]]
                 else:
                     raise NotImplementedError
         return CombinedDataset(is_train, args)
@@ -148,6 +157,8 @@ def build_dataset(is_train, args):
                 SeperatedDataset['glue_qqp']=Glue_qqp(train=is_train)
             elif task.lower() == 'labeled_final':
                 SeperatedDataset['labeled_final']=labeled_final(train=is_train)
+            elif task.lower() == 'anli':
+                SeperatedDataset['anli']=Anli(train=is_train)
             else:
                 raise NotImplementedError
         return SeperatedDataset
@@ -169,6 +180,8 @@ def task_metrics_mapping(args):
             metrics['glue_qqp'] = load("exact_match")
         elif task.lower() == 'labeled_final':
             metrics['labeled_final'] = load("exact_match")
+        if task.lower() == 'anli':
+            metrics['anli'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
