@@ -33,17 +33,17 @@ def main(args):
     
     model.initial_weights()
     # Define LoRA Config
-    lora_config = LoraConfig(
-        r=4,
-        lora_alpha=32,
-        target_modules=["q", "v","query","key"],
-        lora_dropout=0.05,
-        bias="none",
-        modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts_0.0","DenseReluDense.experts_0.1","DenseReluDense.experts_0.2","DenseReluDense.experts_1.0","DenseReluDense.experts_1.1","DenseReluDense.experts_1.2", "mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
-        )
-    # add LoRA adaptor
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
+    # lora_config = LoraConfig(
+    #     r=4,
+    #     lora_alpha=32,
+    #     target_modules=["q", "v","query","key"],
+    #     lora_dropout=0.05,
+    #     bias="none",
+    #     modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts_0.0","DenseReluDense.experts_0.1","DenseReluDense.experts_0.2","DenseReluDense.experts_1.0","DenseReluDense.experts_1.1","DenseReluDense.experts_1.2", "mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
+    #     )
+    # # add LoRA adaptor
+    # model = get_peft_model(model, lora_config)
+    # model.print_trainable_parameters()
     param_train, param_percent = count_parameters(model)
     logger.info(f"Trainable parameters: {param_train/1e6}M ({param_percent}%).")
     if args.resume:
