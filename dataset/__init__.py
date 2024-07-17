@@ -7,3 +7,4 @@ from .glue_qqp import Glue_qqp
 from .paws_labeled_final import labeled_final
 from .Anli import Anli
 from .Mnli import Mnli
+from .Qnli import Qnli
