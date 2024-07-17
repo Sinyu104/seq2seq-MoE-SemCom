@@ -6,7 +6,7 @@ from pathlib import Path
 import datetime
 from loguru import logger
 from model import T5SC_model
-from dataset import SST, IWSLT, SQuAD, MMLU, Glue_mrpc, Glue_qqp, labeled_final, Anli, Mnli, Qnli
+from dataset import *
 from torch.utils.data import Dataset
 from evaluate import load
 from torch.cuda.amp import GradScaler
@@ -50,75 +50,39 @@ def build_dataset(is_train, args):
             return None
         class CombinedDataset(Dataset):
             def __init__(self, is_train, args):
+                self.dataset_list={}
                 for task in args.train_task:
-                    if task.lower() == 'sen':
-                        print(f"Building dataset for sentiment analysis task...")
-                        self.SST = SST(train=is_train)
-                    elif task.lower() == 'trans':
-                        print(f"Building dataset for translation task...")
-                        self.IWSLT = IWSLT(train=is_train)
-                    elif task.lower() == 'qa':
-                        print(f"Building dataset for QA task...")
-                        self.SQuAD = SQuAD(train=is_train)
-                    elif task.lower() == 'mmlu':
-                        print(f"Building dataset for MMLU task...")
-                        self.MMLU = MMLU(train=is_train)
-                    elif task.lower() == 'glue_mrpc':
-                        print(f"Building dataset for Glue/mrpc task...")
-                        self.Glue_mrpc = Glue_mrpc(train=is_train)
-                    elif task.lower() == 'glue_qqp':
-                        print(f"Building dataset for Glue/qqp task...")
-                        self.Glue_qqp = Glue_qqp(train=is_train)
-                    elif task.lower() == 'labeled_final':
-                        print(f"Building dataset for paws/labeled_final task...")
-                        self.labeled_final = labeled_final(train=is_train)
-                    elif task.lower() == 'anli':
-                        print(f"Building dataset for facebook/anli task...")
-                        self.Anli = Anli(train=is_train)
-                    elif task.lower() == 'mnli':
-                        print(f"Building dataset for Mnli task...")
-                        self.Mnli = Mnli(train=is_train)
-                    elif task.lower() == 'qnli':
-                        print(f"Building dataset for Qnli task...")
-                        self.Qnli = Qnli(train=is_train)
-                    else:
-                        raise NotImplementedError
+                    print("Building dataset for {} task...".format(task))
+                    match task:
+                        case 'sen':
+                            self.dataset_list[task] = SST(train=is_train)
+                        case 'trans':
+                            self.dataset_list[task] = IWSLT(train=is_train)
+                        case 'qa':
+                            self.dataset_list[task] = SQuAD(train=is_train)
+                        case 'mmlu':
+                            self.dataset_list[task] = MMLU(train=is_train)
+                        case 'glue_mrpc':
+                            self.dataset_list[task] = Glue_mrpc(train=is_train)
+                        case 'glue_qqp':
+                            self.dataset_list[task] = Glue_qqp(train=is_train)
+                        case 'labeled_final':
+                            self.dataset_list[task] = labeled_final(train=is_train)
+                        case 'anli':
+                            self.dataset_list[task] = Anli(train=is_train)
+                        case 'mnli':
+                            self.dataset_list[task] = Mnli(train=is_train)
+                        case 'qnli':
+                            self.dataset_list[task] = Qnli(train=is_train)
+                        case 'boolq':
+                            self.dataset_list[task] = BoolQ(train=is_train)
+                    
 
                 self.length = [('-', 0)]
                 for task in args.train_task:
-                    if task.lower() == 'sen':
-                        self.SST_len = (len(self.SST)//args.batch_size)*args.batch_size
-                        self.length.append(('sen', self.length[-1][1]+self.SST_len)) 
-                    elif task.lower() == 'trans':
-                        self.IWSLT_len = (len(self.IWSLT)//args.batch_size)*args.batch_size
-                        self.length.append(('trans', self.length[-1][1]+self.IWSLT_len)) 
-                    elif task.lower() == 'qa':
-                        self.SQuAD_len = (len(self.SQuAD)//args.batch_size)*args.batch_size
-                        self.length.append(('qa', self.length[-1][1]+self.SQuAD_len))
-                    elif task.lower() == 'mmlu':
-                        self.mmlu_len = (len(self.MMLU)//args.batch_size)*args.batch_size
-                        self.length.append(('mmlu', self.length[-1][1]+self.mmlu_len))
-                    elif task.lower() == 'glue_mrpc':
-                        self.glue_mrpc_len = (len(self.Glue_mrpc)//args.batch_size)*args.batch_size
-                        self.length.append(('glue_mrpc', self.length[-1][1]+self.glue_mrpc_len))
-                    elif task.lower() == 'glue_qqp':
-                        self.glue_qqp_len = (len(self.Glue_qqp)//args.batch_size)*args.batch_size
-                        self.length.append(('glue_qqp', self.length[-1][1]+self.glue_qqp_len))
-                    elif task.lower() == 'labeled_final':
-                        self.labeled_final_len = (len(self.labeled_final)//args.batch_size)*args.batch_size
-                        self.length.append(('labeled_final', self.length[-1][1]+self.labeled_final_len))
-                    elif task.lower() == 'anli':
-                        self.anli_len = (len(self.Anli)//args.batch_size)*args.batch_size
-                        self.length.append(('anli', self.length[-1][1]+self.anli_len))
-                    elif task.lower() == 'mnli':
-                        self.mnli_len = (len(self.Mnli)//args.batch_size)*args.batch_size
-                        self.length.append(('mnli', self.length[-1][1]+self.mnli_len))
-                    elif task.lower() == 'qnli':
-                        self.qnli_len = (len(self.Qnli)//args.batch_size)*args.batch_size
-                        self.length.append(('qnli', self.length[-1][1]+self.qnli_len))
-                        
-                    else:
-                        raise NotImplementedError
+                    self.task_len = (len(self.dataset_list[task])//args.batch_size)*args.batch_size
+                    self.length.append((task, self.length[-1][1]+self.task_len)) 
+                    
                 
                 
             def __len__(self):
@@ -130,28 +94,9 @@ def build_dataset(is_train, args):
                     if self.length[ta][1]>idx:
                         temp_idx = ta
                         break
-                if self.length[ta][0] == 'sen':
-                    return self.SST[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'trans':
-                    return self.IWSLT[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'qa':
-                    return self.SQuAD[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'mmlu':
-                    return self.MMLU[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'glue_mrpc':
-                    return self.Glue_mrpc[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'glue_qqp':
-                    return self.Glue_qqp[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'labeled_final':
-                    return self.labeled_final[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'anli':
-                    return self.Anli[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'mnli':
-                    return self.Mnli[idx-self.length[ta-1][1]]
-                elif self.length[ta][0] == 'qnli':
-                    return self.Qnli[idx-self.length[ta-1][1]]
-                else:
-                    raise NotImplementedError
+                
+                return self.dataset_list[self.length[ta][0]][idx-self.length[ta-1][1]]
+                
         return CombinedDataset(is_train, args)
     else:
         if args.test_task == '':
@@ -159,28 +104,30 @@ def build_dataset(is_train, args):
             return None
         SeperatedDataset={}
         for task in args.test_task:
-            if task.lower() == 'sen':
-                SeperatedDataset['sen']=SST(train=is_train)
-            elif task.lower() == 'trans':
-                SeperatedDataset['trans']=IWSLT(train=is_train)
-            elif task.lower() == 'qa':
-                SeperatedDataset['qa']=SQuAD(train=is_train)
-            elif task.lower() == 'mmlu':
-                SeperatedDataset['mmlu']=MMLU(train=is_train)
-            elif task.lower() == 'glue_mrpc':
-                SeperatedDataset['glue_mrpc']=Glue_mrpc(train=is_train)
-            elif task.lower() == 'glue_qqp':
-                SeperatedDataset['glue_qqp']=Glue_qqp(train=is_train)
-            elif task.lower() == 'labeled_final':
-                SeperatedDataset['labeled_final']=labeled_final(train=is_train)
-            elif task.lower() == 'anli':
-                SeperatedDataset['anli']=Anli(train=is_train)
-            elif task.lower() == 'mnli':
-                SeperatedDataset['mnli']=Anli(train=is_train)
-            elif task.lower() == 'qnli':
-                SeperatedDataset['qnli']=Qnli(train=is_train)
-            else:
-                raise NotImplementedError
+            match task:
+                case 'sen':
+                    SeperatedDataset[task]=SST(train=is_train)
+                case 'trans':
+                    SeperatedDataset[task]=IWSLT(train=is_train)
+                case 'qa':
+                    SeperatedDataset[task]=SQuAD(train=is_train)
+                case 'mmlu':
+                    SeperatedDataset[task]=MMLU(train=is_train)
+                case 'glue_mrpc':
+                    SeperatedDataset[task]=Glue_mrpc(train=is_train)
+                case 'glue_qqp':
+                    SeperatedDataset[task]=Glue_qqp(train=is_train)
+                case 'labeled_final':
+                    SeperatedDataset[task]=labeled_final(train=is_train)
+                case 'anli':
+                    SeperatedDataset[task]=Anli(train=is_train)
+                case 'mnli':
+                    SeperatedDataset[task]=Anli(train=is_train)
+                case 'qnli':
+                    SeperatedDataset[task]=Qnli(train=is_train)
+                case 'boolq':
+                    SeperatedDataset[task]=BoolQ(train=is_train)
+
         return SeperatedDataset
 
 def task_metrics_mapping(args):
@@ -204,6 +151,8 @@ def task_metrics_mapping(args):
             metrics['anli'] = load("exact_match")
         elif task.lower() == 'qnli':
             metrics['qnli'] = load("exact_match")
+        elif task.lower() == 'boolq':
+            metrics['boolq'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics

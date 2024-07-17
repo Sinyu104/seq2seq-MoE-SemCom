@@ -169,7 +169,7 @@ _CONFIG_FOR_DOC = "T5Config"
 def get_args():
     parser = argparse.ArgumentParser('my training script')
     parser.add_argument('--seed', default=1000, type=int)
-    parser.add_argument('--batch_size', default=10, type=int)
+    parser.add_argument('--batch_size', default=40, type=int)
     parser.add_argument('--epochs', default=400, type=int)
     parser.add_argument('--save_freq', default=3, type=int)
     parser.add_argument('--update_freq', default=1, type=int)
@@ -178,9 +178,9 @@ def get_args():
     parser.add_argument('--output_dir', default='',help='Path where to save')
     parser.add_argument('--save_ckpt', action='store_true')
     parser.set_defaults(save_ckpt=True)
-    parser.add_argument('--train_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli'], type=str, nargs='+', help='Training tasks')
-    parser.add_argument('--test_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli'], nargs='+', type=str, help='Evaluation Data')
-    parser.add_argument('--device', default='cuda', help='Device to use for training/testing')
+    parser.add_argument('--train_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli','boolq'], type=str, nargs='+', help='Training tasks')
+    parser.add_argument('--test_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli','boolq'], nargs='+', type=str, help='Evaluation Data')
+    parser.add_argument('--device', default='cuda:2', help='Device to use for training/testing')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
 
