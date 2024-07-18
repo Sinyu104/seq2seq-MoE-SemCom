@@ -125,6 +125,7 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
     # if (i + 1) % accumulation_steps != 0:
     #     optimizer.step()
     #     optimizer.zero_grad()
+
     avg_cr = {task: cr[task]/task_batch[task] for task in args.train_task}
         
     avg_train_loss = total_loss / len(dataloader)
