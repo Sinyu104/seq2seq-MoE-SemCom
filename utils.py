@@ -76,6 +76,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Qnli(train=is_train)
                         case 'boolq':
                             self.dataset_list[task] = BoolQ(train=is_train)
+                        case 'copa':
+                            self.dataset_list[task] = Copa(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -127,6 +129,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Qnli(train=is_train)
                 case 'boolq':
                     SeperatedDataset[task]=BoolQ(train=is_train)
+                case 'copa':
+                    SeperatedDataset[task]=Copa(train=is_train)
 
         return SeperatedDataset
 
@@ -153,6 +157,8 @@ def task_metrics_mapping(args):
             metrics['qnli'] = load("exact_match")
         elif task.lower() == 'boolq':
             metrics['boolq'] = load("exact_match")
+        elif task.lower() == 'copa':
+            metrics['copa'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics

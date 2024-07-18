@@ -9,3 +9,4 @@ from .Anli import Anli
 from .Mnli import Mnli
 from .Qnli import Qnli
 from .BoolQ import BoolQ
+from .Copa import Copa
