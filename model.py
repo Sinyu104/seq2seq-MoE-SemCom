@@ -457,7 +457,7 @@ def batch_index_select(x, idx):
 #         return hidden_states, sparsity_loss
 
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config, num_experts=10):
+    def __init__(self, config: T5SC_config, num_experts=1):
         super().__init__()
         self.num_experts = num_experts
         self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)

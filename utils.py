@@ -141,7 +141,6 @@ def build_dataset(is_train, args):
 def task_metrics_mapping(args):
     metrics = {}
     for task in args.test_task:
-        print("task: ", task)
         if task.lower() == 'sen':
             metrics['sen'] = load("exact_match")
         elif task.lower() == 'trans':
@@ -220,27 +219,3 @@ def get_param_groups(model, mode):
     return params
 
 
-class NativeScaler:
-    def __init__(self, scale_factor=2**16, max_norm=None):
-        self.scaler = GradScaler(init_scale=scale_factor)
-        self.max_norm = max_norm
-
-    def __call__(self, step, loss, optimizer, accumulation_steps=3):
-        loss = loss / accumulation_steps # Scale loss
-        self.scaler.scale(loss).backward() # Compute gradients
-        
-        # Clip gradients by norm
-        if self.max_norm is not None:
-            self.scaler.unscale_(optimizer)
-            for group in optimizer.param_groups:
-                torch.nn.utils.clip_grad_norm_(group['params'], self.max_norm)
-        else:
-            self.scaler.unscale_(optimizer)
-         # Step the optimizer
-        self.scaler.step(optimizer)
-        self.scaler.update()
-
-        # Perform the update and reset gradients periodically
-        if (step + 1) % accumulation_steps == 0:
-            optimizer.step()
-            optimizer.zero_grad()

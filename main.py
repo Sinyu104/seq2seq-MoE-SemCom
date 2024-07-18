@@ -69,7 +69,7 @@ def main(args):
         else:
             testloader[task] = torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
                                                         batch_size=args.batch_size, shuffle=False, drop_last = False)
-    loss_scaler = NativeScaler()
+ 
     
     if args.eval:
         if testset == None:
@@ -93,7 +93,7 @@ def main(args):
     optimizer = torch.optim.AdamW(get_param_groups(model=model, mode='info'), lr = 1e-5) 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     for epoch in range(args.epochs):
-        train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, loss_scaler = loss_scaler, device=device, mode='info')
+        train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, device=device, mode='info')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
         if epoch%3==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)

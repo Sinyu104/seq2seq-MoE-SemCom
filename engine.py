@@ -84,7 +84,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
                         labels = tokenizer.decode(targets[ii], skip_special_tokens=True)
                         result = metrics[task].compute(predictions=[predicted], references=[labels])
-                        scores[task] += result["exact_match"]
+                        scores[task] += result[next(iter(result))]
                         total[task] += 1
                     if batch_idx % print_freq == 0:
                         print('[%s] Test %d/%d: [score: %f]' %(task, batch_idx*batch_size, len(testloader[task].dataset), scores[task]/total[task]))# , cr['sen']/cr_batch['sen']
@@ -94,7 +94,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
         # final['compression rate'][task] = cr[task]/cr_batch[task]
     return final
 
-def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_freq=20, accumulation_steps=3):
+def train(args, model, dataloader, optimizer, device, mode, print_freq=20, accumulation_steps=6):
     total_loss = 0.0
     cr = {task: 0 for task in args.train_task}
     task_batch = {task: 0 for task in args.train_task}
@@ -114,17 +114,22 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
         compression_rate = outputs.compression_rate
         cr[task]+=compression_rate.item()
         task_batch[task]+=1
-        # print("CR task: ", task, cr[task], "task batch: ", task_batch[task])
+        total_loss += loss.item()
         
-        loss_scaler(i, loss, optimizer)
+        loss = loss / accumulation_steps
+        loss.backward()
+
+        if (i + 1) % accumulation_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
         
 
-        total_loss += loss.item()
+        
         if i % print_freq == 0:
             print('[Batch: %d/%d] [loss: %f] [compression rate: %f]' %(i+1, len(dataloader), total_loss/task_batch[task], cr[task]/task_batch[task]))
-    # if (i + 1) % accumulation_steps != 0:
-    #     optimizer.step()
-    #     optimizer.zero_grad()
+    if (i + 1) % accumulation_steps != 0:
+        optimizer.step()
+        optimizer.zero_grad()
 
     avg_cr = {task: cr[task]/task_batch[task] for task in args.train_task}
         
