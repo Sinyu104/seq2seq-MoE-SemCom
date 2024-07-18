@@ -7,3 +7,4 @@ dataset/MultiRC/
 pytorch-test.sh
 test.py
 dataset/MMLU_data
+modelckpt*
