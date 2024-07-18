@@ -48,7 +48,10 @@ class BoolQ(Dataset):
             input_text = input_text.replace("{question}", sample['question'])
             input_text = input_text.replace("{options_}", options)
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
-            self.data.append((inputs, tokenizer(get_binary_label(sample['answer']), padding='max_length',truncation=True,max_length=4,return_tensors="pt").input_ids))
+            labels = tokenizer(get_binary_label(sample['answer']), padding='max_length',truncation=True,max_length=4,return_tensors="pt").input_ids
+            if train:
+                labels[labels == tokenizer.pad_token_id] = -100
+            self.data.append((inputs, labels))
             
     def __len__(self):
         return len(self.data)

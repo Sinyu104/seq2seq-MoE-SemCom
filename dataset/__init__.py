@@ -10,3 +10,4 @@ from .Mnli import Mnli
 from .Qnli import Qnli
 from .BoolQ import BoolQ
 from .Copa import Copa
+from .ARC_easy import ARC_easy

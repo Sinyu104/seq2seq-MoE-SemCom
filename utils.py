@@ -78,6 +78,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = BoolQ(train=is_train)
                         case 'copa':
                             self.dataset_list[task] = Copa(train=is_train)
+                        case 'arc_easy':
+                            self.dataset_list[task] = ARC_easy(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -131,12 +133,15 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=BoolQ(train=is_train)
                 case 'copa':
                     SeperatedDataset[task]=Copa(train=is_train)
+                case 'arc_easy':
+                    SeperatedDataset[task]=ARC_easy(train=is_train)
 
         return SeperatedDataset
 
 def task_metrics_mapping(args):
     metrics = {}
     for task in args.test_task:
+        print("task: ", task)
         if task.lower() == 'sen':
             metrics['sen'] = load("exact_match")
         elif task.lower() == 'trans':
@@ -153,12 +158,16 @@ def task_metrics_mapping(args):
             metrics['labeled_final'] = load("exact_match")
         elif task.lower() == 'anli':
             metrics['anli'] = load("exact_match")
+        elif task.lower() == 'mnli':
+            metrics['mnli'] = load("exact_match")
         elif task.lower() == 'qnli':
             metrics['qnli'] = load("exact_match")
         elif task.lower() == 'boolq':
             metrics['boolq'] = load("exact_match")
         elif task.lower() == 'copa':
             metrics['copa'] = load("exact_match")
+        elif task.lower() == 'arc_easy':
+            metrics['arc_easy'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics

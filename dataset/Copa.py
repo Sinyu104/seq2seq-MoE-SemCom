@@ -23,7 +23,7 @@ class Copa(Dataset):
     def __init__(self, train=True, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-        logger.info("Loading boolq dataset")
+        logger.info("Loading copa dataset")
         copa = load_dataset("pkavumba/balanced-copa")
 
 
@@ -32,7 +32,7 @@ class Copa(Dataset):
             
         else:
             self.copa = copa["test"]
-            
+
         prompt = set_prompt(prompt_idx)
         options = set_options(prompt_idx)
         self.data = []
@@ -44,11 +44,14 @@ class Copa(Dataset):
             input_text = input_text.replace("{Choise2}", sample['choice2'])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if sample['label']==0:
-                self.data.append((inputs, tokenizer(sample['choice1'], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids))
+                labels = tokenizer(sample['choice1'], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids
             elif sample['label']==1:
-                self.data.append((inputs, tokenizer(sample['choice2'], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids))
+                labels = tokenizer(sample['choice2'], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids
             else:
                 raise ValueError("Invalid label")
+            if train:
+                labels[labels == tokenizer.pad_token_id] = -100
+            self.data.append((inputs, labels))
             
     def __len__(self):
         return len(self.data)
