@@ -472,7 +472,7 @@ class T5DenseGatedActDense(nn.Module):
         # print(self.experts[0].weight)
         # print(self.experts[1].weight)
 
-    def forward(self, hidden_states, k=1):
+    def forward(self, hidden_states, k=2):
         # Compute gate values
         gate_values = self.gate(hidden_states)
         
