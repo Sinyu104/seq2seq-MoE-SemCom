@@ -1,6 +1,8 @@
 __pycache__/
 dataset/__pycache__/
-dataset/MMLU/
+dataset/MMLU_data/
+dataset/MultiRC
 test.py
 LLMSC
 args.py
+modelckpt_*
