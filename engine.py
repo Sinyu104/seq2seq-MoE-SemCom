@@ -34,8 +34,8 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         result = metrics['sen'].compute(predictions=[predicted], references=[labels])
                         scores['sen'] += result["exact_match"]
                         total['sen'] += 1
-                    if batch_idx % print_freq == 0:
-                        print('[SEN] Test %d/%d: [score: %f] [compress rate: %f]' %(batch_idx*batch_size, len(testloader['sen'].dataset), scores['sen']/total['sen'], cr['sen']/cr_batch['sen']))
+                    if (batch_idx+1) % print_freq == 0:
+                        print('[SEN] Test %d/%d: [score: %f] [compress rate: %f]' %((batch_idx+1)*batch_size, len(testloader['sen'].dataset), scores['sen']/total['sen'], cr['sen']/cr_batch['sen']))
         elif task.lower() == 'trans':
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader['trans']):
