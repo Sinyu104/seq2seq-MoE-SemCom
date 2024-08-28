@@ -80,6 +80,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Copa(train=is_train)
                         case 'arc_easy':
                             self.dataset_list[task] = ARC_easy(train=is_train)
+                        case 'hella':
+                            self.dataset_list[task] = HellaSwag(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -135,6 +137,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Copa(train=is_train)
                 case 'arc_easy':
                     SeperatedDataset[task]=ARC_easy(train=is_train)
+                case 'hella':
+                    SeperatedDataset[task]=HellaSwag(train=is_train)
 
         return SeperatedDataset
 
@@ -167,6 +171,8 @@ def task_metrics_mapping(args):
             metrics['copa'] = load("exact_match")
         elif task.lower() == 'arc_easy':
             metrics['arc_easy'] = load("exact_match")
+        elif task.lower() == 'hella':
+            metrics['hella'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
