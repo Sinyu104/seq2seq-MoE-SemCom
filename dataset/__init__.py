@@ -13,3 +13,4 @@ from .Copa import Copa
 from .ARC_easy import ARC_easy
 from .hellaswag import HellaSwag
 from .winogrande import Winogrande
+from .cosmos_qa import Cosmos
