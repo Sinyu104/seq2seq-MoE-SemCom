@@ -192,7 +192,7 @@ def task_metrics_mapping(args):
 
 def save_model(args, model, config, dir='', train_stats=None, test_stats=None):
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = Path('modelckpt_'+current_time) if dir=='' else dir
+    output_dir = Path('MoE_modelckpt_'+current_time) if dir=='' else dir
     path_exists_make(output_dir)
     torch.save({
         'model_state_dict': model.state_dict(),
