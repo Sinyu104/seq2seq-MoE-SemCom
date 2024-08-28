@@ -97,7 +97,7 @@ def main(args):
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
         if (epoch+1)%3==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
-            # save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
+            save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
         # print("On average: ")
         # for task in args.test_task:
         #     print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
