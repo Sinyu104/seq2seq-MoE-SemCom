@@ -178,9 +178,9 @@ def get_args():
     parser.add_argument('--output_dir', default='',help='Path where to save')
     parser.add_argument('--save_ckpt', action='store_true')
     parser.set_defaults(save_ckpt=True)
-    parser.add_argument('--train_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli','boolq','copa','arc_easy'], type=str, nargs='+', help='Training tasks')
-    parser.add_argument('--test_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli','boolq','copa','arc_easy'], nargs='+', type=str, help='Evaluation Data')
-    parser.add_argument('--device', default='cuda:3', help='Device to use for training/testing')
+    parser.add_argument('--train_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli','boolq','copa','arc_easy','hella'], type=str, nargs='+', help='Training tasks')
+    parser.add_argument('--test_task', default='', choices=['sen', 'trans', 'qa','mmlu','glue_mrpc','glue_qqp','labeled_final','anli','mnli','qnli','boolq','copa','arc_easy','hella'], nargs='+', type=str, help='Evaluation Data')
+    parser.add_argument('--device', default='cuda:1', help='Device to use for training/testing')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
 
