@@ -23,7 +23,7 @@ class Winogrande(Dataset):
     def __init__(self, train=True, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-        logger.info("Loading hellaswag dataset")
+        logger.info("Loading winogrande dataset")
         winog = load_dataset("allenai/winogrande", 'winogrande_l')
         
         if train:
