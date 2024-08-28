@@ -20,9 +20,9 @@ def get_model(args, config):
     model = T5SC_model.from_pretrained(pretrained_model_name_or_path=args.pretrain_model, config=config)
     
     # Stop gradient for pre-trained model
-    for name, param in model.named_parameters():
-        if not ('FSM' in name or 'noise_func' in name):
-            param.requires_grad_(False)
+    # for name, param in model.named_parameters():
+    #     if not ('FSM' in name or 'noise_func' in name or 'codebook' in name):
+    #         param.requires_grad_(False)
     return model
 
 def count_parameters(model):
@@ -162,11 +162,11 @@ def get_param_groups(model, mode):
     params = []
     if mode == 'info':
         for name, param in model.named_parameters():
-            # params.append(param)
-            if 'mask_generator.L' in name or 'mask_generator.l1' in name or 'mask_generator.l2' in name or 'mask_generator.l3' in name or 'bert' in name:
-                params.append(param)
-            else:
-                pass
+            params.append(param)
+            # if 'FSM' in name or 'noise_func' in name or 'codebook' in name:
+            #     params.append(param)
+            # else:
+            #     pass
     else:
         for name, param in model.named_parameters():
             if 'FSMs.0' in name:

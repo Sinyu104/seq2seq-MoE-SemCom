@@ -178,32 +178,30 @@ class chan_mask_gen(nn.Module):
         #     nn.Linear(embed_dim // 4, 2),
         #     nn.LogSoftmax(dim=-1)
         # )
-        self.norm = nn.LayerNorm(embed_dim)
-        self.L = nn.Linear(embed_dim, embed_dim// 2, bias=False)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim//2)
+        self.L = nn.Linear(embed_dim, embed_dim//2, bias=False)
         self.l1 = nn.Linear(embed_dim, embed_dim // 2, bias=False)
         self.l2 = nn.Linear(embed_dim // 2, embed_dim // 4, bias=False)
-        self.l3 = nn.Linear(embed_dim // 4, 2, bias=False)
+        self.l3 = nn.Linear(embed_dim // 4, 1, bias=False)
         self.act = nn.GELU()
-        self.logSoftmax = nn.LogSoftmax(dim=-1)
+        self.sigmoid = nn.Sigmoid()
     
 
 
     def forward(self, x, noise_feature):   
-        
-        x = self.act(self.L(self.norm(x)))
         B, N, C = x.size()
+        x = self.act(self.L(self.norm1(x)))
         # B, N, C = x.size()
         # local_x = x[:,:, :C//2]
         # global_x = (x[:,:, C//2:] * policy).sum(dim=1, keepdim=True) / torch.sum(policy, dim=1, keepdim=True)
  
         # x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
         # x = self.out_conv(x)
-        x = torch.cat([x,noise_feature.expand(B,N,C)], dim=-1)
+        x = torch.cat([x,noise_feature.expand(B,N,-1)], dim=-1)
         x = self.act(self.l1(x))
         x = self.act(self.l2(x))
-        x = self.logSoftmax(self.l3(x))
-        
-        
+        x = self.sigmoid(self.l3(x))
         return x
     
 class info_mask_gen(nn.Module):
@@ -236,10 +234,10 @@ class info_mask_gen(nn.Module):
 
 
     def forward(self, embedding, attention_mask): 
-        bert_outputs = self.bert(inputs_embeds=embedding, attention_mask=attention_mask)
-        bert_embedding = bert_outputs.last_hidden_state
-        x = self.norm(bert_embedding) 
-        x = self.act(self.L(x))
+        # bert_outputs = self.bert(inputs_embeds=embedding, attention_mask=attention_mask)
+        # bert_embedding = bert_outputs.last_hidden_state
+        # x = self.norm(bert_embedding) 
+        x = self.act(self.L(embedding))
         # print("L weight: ", self.L.weight)
         # print("l1 weight: ", self.l1.weight)
         # print("l2 weight: ", self.l2.weight)
@@ -285,27 +283,30 @@ class infoFSM(nn.Module):
             curr_m = curr_m+1e-10
             # print("input_feature shape: ", input_feature.shape)
             mask = curr_m.int()
-            curr_m = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
             
-            input_feature = input_feature*curr_m
+            input_feature = input_feature*curr_m_
             
             return input_feature, mask, curr_m
         else:
-            threshold = 0.5
-            prob = (prob >= threshold)
-            mask = prob[:, :, 0]*prev_m
-            curr_m = mask+1e-10
+            curr_m = prob.squeeze(-1)*prev_m
+            curr_m = self.STE(curr_m)
+            curr_m = curr_m+1e-10
+            mask = curr_m.int()
+            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            
             # print(" prev_m: ",  prev_m.shape)
             # print("input_feature shape: ", input_feature.shape)
-            mask_ = mask.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
-            input_feature = input_feature * mask_
+            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            input_feature = input_feature * curr_m_
             
             keep_indices = [
                 row.nonzero().squeeze().tolist() if not isinstance(row.nonzero().squeeze().tolist(), int)
                 else [row.nonzero().squeeze().tolist()]
                 for row in mask
             ]  
-            mask_indices = [[idx for idx in range(self.mask_num) if idx not in indices] for indices in keep_indices]          
+            mask_indices = [[idx for idx in range(self.mask_num) if idx not in indices] for indices in keep_indices]  
+            
             # prob_kept = torch.randn(prob_kept.shape).cuda()
             num_kept = torch.floor(torch.max(torch.sum(mask, dim = 1))).to(dtype=torch.int)
             num_kept = 1 if num_kept<1 else num_kept
@@ -342,59 +343,45 @@ class chanFSM(nn.Module):
         
     def forward(self, input_feature, noise_feature, prev_m): 
         batch_size = input_feature.shape[0]
-        # print("input_feature shape: ", input_feature.shape)
-        prob = self.mask_generator(input_feature, noise_feature).reshape(batch_size, -1, 2)  # Z^g Z^l Z^c
-        # print("Prob shape: ", prob[0])
-        # print("Gumble_softmax: ", F.gumbel_softmax(prob, hard=True))
-        # print("Input feature: ", input_feature)
-        # print("input feature shape: ", input_feature.shape)
-        # print("Is it training? ", self.training)
-        # input("pause")
+        prob = self.mask_generator(input_feature, noise_feature)  # Z^g Z^l Z^c
+        self.STE = StraightThroughEstimator()
+        
         if self.training:
-            curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1] 
-            # print("curr_m: ", curr_m[0])
-            input_feature = input_feature * curr_m
-            # print("curr_m: ", curr_m.shape)
-            # print("curr_m: ", curr_m[0])
-            # print("input_f: ", input_feature[0])
-            curr_m = curr_m.squeeze()
-            keep_indices = [
-                row.nonzero().squeeze().tolist() if not isinstance(row.nonzero().squeeze().tolist(), int)
-                else [row.nonzero().squeeze().tolist()]
-                for row in curr_m
-            ]            
-            # print("keep_indices: ", keep_indices)
-            mask_indices = [[idx for idx in range(self.mask_num) if idx not in indices] for indices in keep_indices]
+            # curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0].squeeze() * prev_m
+            curr_m = prob.squeeze(-1)*prev_m
+            curr_m = self.STE(curr_m)
             
-            indices=[keep_indices[row]+mask_indices[row]  for row in range(batch_size)]
-            # print("indices: ", indices)
-            indices = torch.tensor(indices).to(input_feature.device)
-            input_feature=torch.gather(input_feature, 1, indices.unsqueeze(-1).expand(-1, -1, 512))
-            indices = torch.sum(curr_m, dim=1).to(dtype=torch.int)
-            new_tensor = torch.zeros_like(curr_m)
-            nonzero_indices = (curr_m != 0).int()
-            for idx, row in enumerate(indices):
-                new_tensor[idx, :row] = torch.tensor(1,dtype=torch.int)
-            # print("curr_m: ", new_tensor[0])
-            # print("input_f: ", input_feature[0])
-            return input_feature, new_tensor, curr_m
+            # print("input_feature shape: ", input_feature.shape)
+            mask = curr_m.int()
+            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            
+            input_feature = input_feature*curr_m_
+            curr_m = curr_m+1e-10
+            return input_feature, mask, curr_m
         else:
 
-            curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1]
-            input_feature = input_feature * curr_m
-            curr_m = curr_m.squeeze()
+            curr_m = prob.squeeze(-1)*prev_m
+            curr_m = self.STE(curr_m)
             
+            mask = curr_m.int()
+            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            # print(" prev_m: ",  prev_m.shape)
+            # print("input_feature shape: ", input_feature.shape)
+            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
+            input_feature = input_feature * curr_m_
+            curr_m = curr_m+1e-10
+
             keep_indices = [
                 row.nonzero().squeeze().tolist() if not isinstance(row.nonzero().squeeze().tolist(), int)
                 else [row.nonzero().squeeze().tolist()]
-                for row in curr_m
+                for row in mask
             ]  
-            mask_indices = [[idx for idx in range(self.mask_num) if idx not in indices] for indices in keep_indices]          
+            mask_indices = [[idx for idx in range(self.mask_num) if idx not in indices] for indices in keep_indices]  
             # prob_kept = torch.randn(prob_kept.shape).cuda()
-            num_kept = torch.floor(torch.max(torch.sum(curr_m, dim = 1))).to(dtype=torch.int)
+            num_kept = torch.floor(torch.max(torch.sum(mask, dim = 1))).to(dtype=torch.int)
             num_kept = 1 if num_kept<1 else num_kept
-            print("Average number kept: ",torch.floor(torch.mean(torch.sum(curr_m, dim = 1))).to(dtype=torch.int))
-            print("number kept: ", num_kept)
+            # print(torch.floor(torch.mean(torch.sum(curr_m, dim = 1))).to(dtype=torch.int))
+            # print("number kept: ", num_kept)
             for row in range(batch_size):
                 if len(keep_indices[row])<num_kept:
                     selected_mask_indices = torch.randperm(len(mask_indices[row]))[:(num_kept-len(keep_indices[row]))].tolist()
@@ -402,8 +389,8 @@ class chanFSM(nn.Module):
                     
             keep_indices = torch.tensor(keep_indices).to(input_feature.device)
             input_feature = batch_index_select(input_feature, keep_indices)
-            curr_m = batch_index_select(curr_m, keep_indices)
-            return input_feature, curr_m, curr_m
+            mask = batch_index_select(mask, keep_indices)
+            return input_feature, mask, curr_m
 
 
 def batch_index_select(x, idx):
@@ -691,8 +678,8 @@ class T5Stack(T5PreTrainedModel):
             self.FSMs = nn.ModuleList([infoFSM(mask_num=config.num_token) for _ in range(self.num_infoFSM)])
             for _ in range(self.num_chanFSM):
                 self.FSMs.append(chanFSM(mask_num=config.num_token))
-            # self.noise_func = nn.Sequential(nn.Linear(16,16, bias=False),nn.ReLU(),nn.Linear(16,64, bias=False),
-            #             nn.ReLU(), nn.Linear(64, config.d_model//2, bias=False),nn.ReLU())   
+            self.noise_func = nn.Sequential(nn.Linear(1,16),nn.ReLU(),nn.Linear(16,64),
+                        nn.ReLU(), nn.Linear(64, config.d_model//2),nn.ReLU())
             
             
         
@@ -773,7 +760,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        noise_std = 10**(-torch.tensor(12.0, dtype=torch.float32)/20),
+        noise_std = 10**(-torch.FloatTensor([14.0])/20),
         mode='info',
         sparsity_loss = torch.tensor(0.0, dtype=torch.float32),
     ):
@@ -972,18 +959,21 @@ class T5Stack(T5PreTrainedModel):
                     # print("origianl length: ", torch.mean(compression_rate_group[0].float()))
                 else:
                     # print("In chanFSM")
-                    noise_feature = self.noise_func(torch.full((64, 16), noise_std.item()).to(self.device))
+                    noise_feature = self.noise_func(noise_std.to(input_ids.device).unsqueeze(1))
                     # print("hidden stante: ", hidden_states)
                     # print("curr_m: ", curr_m.shape)
-                    hidden_states, mask_dict_, curr_m = self.FSMs[d](input_feature=hidden_states, noise_feature=noise_feature, prev_m=curr_m)
+                    hidden_states, mask_dict_, curr_m = self.FSMs[d](input_feature=hidden_states, noise_feature=noise_feature, prev_m=attention_mask)
                     # print("currmask: ", curr_m.squeeze()[0])
                     # print("Attension mask: ", attention_mask[0])
                     # print("currmask: ", curr_m.squeeze()[0])
+                    
                     input_shape = hidden_states.size()[:-1]
-                    extended_attention_mask = self.get_extended_attention_mask(curr_m, input_shape)
+                    extended_attention_mask = self.get_extended_attention_mask(mask_dict_, input_shape)
+                    confidence_rate_group = confidence_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
                     compression_rate_group = compression_rate_group + (torch.sum(curr_m, dim = 1),)
                     mask_dict = mask_dict + (mask_dict_,)
                     compression_rates = compression_rate_group[-1]
+                    confidence_rate = confidence_rate_group[-1]
 
             elif not self.is_decoder:
                 compression_rate_group = compression_rate_group + (torch.sum(attention_mask, dim = 1),)
@@ -1079,9 +1069,9 @@ class T5SC_model(T5PreTrainedModel):
         self.distortion = config.distortion
 
         self.bit_per_digit = 4
-        # self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
-        #                                 embedding_dim=config.d_model,
-        #                                 quan_bits=self.bit_per_digit)
+        self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
+                                        embedding_dim=config.d_model,
+                                        quan_bits=self.bit_per_digit)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1239,10 +1229,11 @@ class T5SC_model(T5PreTrainedModel):
             self.is_channel_disable=False
 
         if self.training:
-            snr_list = np.arange(0, 4, 4)
+            snr_list = np.arange(-6, 16, 4)
             SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
+            # SNRdb = torch.FloatTensor([-6.0]).to(self.device)
         else:
-            SNRdb = torch.FloatTensor([0.0]).to(self.device)
+            SNRdb = torch.FloatTensor([14.0]).to(self.device)
         # print("Is training? ", self.training, "mode: ", mode, "SNR: ", SNRdb)
         noise_std = 10**(-SNRdb/20)
         
@@ -1279,11 +1270,9 @@ class T5SC_model(T5PreTrainedModel):
             compression_rate = encoder_outputs[-3]
             confidence_rate = encoder_outputs[-2]
             mask_dict = encoder_outputs[-1][-1]
+
+        hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
         
-       
-        
-            
-        # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
         
 
         if self.model_parallel:
@@ -1364,17 +1353,19 @@ class T5SC_model(T5PreTrainedModel):
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            if task == 'sen':
-                loss =  1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 0.0)+5*torch.mean(compression_rate)#+1e-6*torch.mean(confidence_rate)
-            elif task == 'trans':
-                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.9, 0.0)+1*torch.mean(compression_rate)
-                # loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.0, 0.0)#+1e-3*torch.mean(compression_rate)
-            else:
-                loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.7, 0.0)+1e-1*torch.mean(compression_rate)
+            loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 0.0)+15*torch.mean(compression_rate)+1e3*codebook_loss
+            # if task == 'sen':
+            #     loss =  1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 0.0)+10*torch.mean(compression_rate)#+5*torch.mean(confidence_rate)
+            # elif task == 'trans':
+            #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.9, 0.0)+1e-1*torch.mean(compression_rate)#+1*torch.mean(confidence_rate)
+            #     # loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.0, 0.0)#+1e-3*torch.mean(compression_rate)
+            # else:
+            #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.7, 0.0)+5e-1*torch.mean(compression_rate)#+1*torch.mean(confidence_rate)
+            # print("SNR: ", SNRdb)
             # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
             # print("Loss from compression: ", torch.mean(compression_rate))
             # print("Loss from confidence: ", torch.mean(confidence_rate))
-            # print("Loss from codebook: ", 1e3*codebook_loss)
+            # print("Loss from codebook: ", codebook_loss)
             # print("Final loss: ", loss)
             # input("Pausezzz")
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
@@ -1476,7 +1467,7 @@ class T5SC_model(T5PreTrainedModel):
         self,input_ids: Optional[torch.LongTensor] = None, 
         attention_mask: Optional[torch.FloatTensor] = None
     ):
-        SNRdb = torch.FloatTensor([12.0]).to(self.device)
+        SNRdb = torch.FloatTensor([14.0]).to(self.device)
         noise_std = 10**(-SNRdb/20)
         encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1485,7 +1476,7 @@ class T5SC_model(T5PreTrainedModel):
                 mode='chan'
             )
         compression_rate = encoder_outputs[-3]
-        return torch.mean(compression_rate.float())
+        return torch.mean(compression_rate)
 
 def array_to_binaryarray(input_array, num_bits):
     binary_matrix = (np.right_shift(input_array[:, None], np.arange(num_bits)[::-1]) & 1).astype(np.int32)
@@ -1515,12 +1506,10 @@ def commun_sim(data_dec, snr=18, quan_bits=8):
     # print("tx_bits: ", tx_bits)
     # Communication Process
     tx_symbols = qam_mapper(tx_bits, mapping_table)
-    # print("tx_symbols: ", tx_symbols)
 
 
     # Wireless Channel
     rx_symbols = channel_Awgn(tx_symbols, snr=snr)
-    # print("rx_symbols: ", rx_symbols)
     # rx_symbols = channel_Rayleigh(tx_symbols, snr=snr)
     # rx_symbols = channel_Rician(tx_symbols, snr=snr)
     # M-QAM Demodulation
@@ -1546,7 +1535,7 @@ class VectorQuantizer(nn.Module):
                  num_embeddings: int,
                  embedding_dim: int,
                  quan_bits: int = 4,
-                 beta: float = 1.0):
+                 beta: float = 0.25):
         super(VectorQuantizer, self).__init__()
         self.K = num_embeddings
         self.D = embedding_dim
@@ -1571,12 +1560,12 @@ class VectorQuantizer(nn.Module):
         shape = encoding_inds.shape
         # print("encoding_inds: ", encoding_inds)
         Rx_signal = commun_sim(encoding_inds, snr=snr, quan_bits=self.quan_bits)
-        encoding_inds = torch.from_numpy(Rx_signal).cuda().reshape(shape)
+        encoding_inds = torch.from_numpy(Rx_signal).reshape(shape).to(latents.device)
   
         
         # Convert to one-hot encodings
         device = latents.device
-        
+
         encoding_one_hot = torch.zeros(encoding_inds.size(0), self.K, device=device)
         encoding_one_hot.scatter_(1, encoding_inds, 1)  # [BL x K]
 
@@ -1592,7 +1581,7 @@ class VectorQuantizer(nn.Module):
 
         # Add the residue back to the latents
         quantized_latents = latents + (quantized_latents - latents).detach()
-        #print((quantized_latents - latents))
+        # print((quantized_latents - latents))
         return quantized_latents.contiguous(), vq_loss  # [B x L x D]
 
 

@@ -169,8 +169,8 @@ _CONFIG_FOR_DOC = "T5Config"
 def get_args():
     parser = argparse.ArgumentParser('my training script')
     parser.add_argument('--seed', default=1000, type=int)
-    parser.add_argument('--batch_size', default=30, type=int)
-    parser.add_argument('--epochs', default=20, type=int)
+    parser.add_argument('--batch_size', default=40, type=int)
+    parser.add_argument('--epochs', default=30, type=int)
     parser.add_argument('--save_freq', default=3, type=int)
     parser.add_argument('--update_freq', default=1, type=int)
     parser.add_argument('--model', default='T5SC_model', metavar='MODEL',type=str, help='Name of model to train')
@@ -180,7 +180,7 @@ def get_args():
     parser.set_defaults(save_ckpt=True)
     parser.add_argument('--train_task', default='', choices=['sen', 'trans', 'qa'], type=str, nargs='+', help='Training tasks')
     parser.add_argument('--test_task', default='', choices=['sen', 'trans', 'qa'], nargs='+', type=str, help='Evaluation Data')
-    parser.add_argument('--device', default='cuda', help='Device to use for training/testing')
+    parser.add_argument('--device', default='cuda:2', help='Device to use for training/testing')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
 

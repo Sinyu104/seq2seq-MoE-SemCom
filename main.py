@@ -9,6 +9,7 @@ torch.autograd.set_detect_anomaly(True)
 import sys
 import time
 import datetime
+import random
 from config import T5SC_config
 torch.set_printoptions(threshold=10_000)
 from peft import LoraConfig, get_peft_model, TaskType
@@ -55,6 +56,8 @@ def main(args):
     trainloader = torch.utils.data.DataLoader(dataset=trainset, num_workers=0, pin_memory=True,
                                                 batch_size=args.batch_size, shuffle=False,
                                                 drop_last = True)
+    batches = [batch for batch in trainloader]
+    random.shuffle(batches)
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
@@ -85,15 +88,15 @@ def main(args):
     optimizer = torch.optim.AdamW(get_param_groups(model=model, mode='info'), lr = 1e-5) 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     for epoch in range(args.epochs):
-        train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, loss_scaler = loss_scaler, device=device, mode='info')
+        train_stats = train(args=args, model=model, dataloader=batches, optimizer=optimizer, loss_scaler = loss_scaler, device=device, mode='chan')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
         if epoch%3==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
-            # save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
+            save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
         # print("On average: ")
         # for task in args.test_task:
         #     print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
-        print(f'Epoch {epoch+1}, Learning Rate: {scheduler.get_last_lr()}')
+        # print(f'Epoch {epoch+1}, Learning Rate: {scheduler.get_last_lr()}')
         scheduler.step()
     test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
     for task in args.test_task:
