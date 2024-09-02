@@ -141,7 +141,7 @@ class BaseModelSCOutputWithPastAndCrossAttentions(ModelOutput):
     compression_rates: Optional[Tuple[torch.FloatTensor, ...]] = None
     confidence_rate:  Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_dict: Optional[Tuple[torch.FloatTensor, ...]] = None
-    sparsity_loss: torch.FloatTensor = None
+    rho: torch.FloatTensor = None
 
 
 class STEFunction(autograd.Function):
@@ -158,51 +158,62 @@ class StraightThroughEstimator(nn.Module):
         x = STEFunction.apply(x)
         return x
 
+class rho_layer(nn.Module):
+    def __init__(self, input_channel, output_channel):
+        super(rho_layer, self).__init__()
+        self.H = nn.Parameter(torch.ones(output_channel, input_channel))
+        self.b = nn.Parameter(torch.ones(output_channel))
+        self.H.data.normal_(0, 0.1)
+        self.b.data.normal_(0, 0.1)
 
+    def forward(self, x):
+        H = torch.abs(self.H)
+        x = F.linear(x,H)
+        return torch.tanh(x* 1.7)
+
+class rho_function(nn.Module):
+    def __init__(self, intermediate_dim):
+        super(rho_function, self).__init__()
+        self.f1 = rho_layer(1,16)
+        self.f2 = rho_layer(16,16)
+        self.f3 = rho_layer(16,16)
+        self.f4 = rho_layer(16,intermediate_dim)
+        
+    def forward(self, x):
+        x = self.f1(x)
+        x = self.f2(x)
+        x = self.f3(x)
+        x = self.f4(x)
+        return x
 
 
 class chan_mask_gen(nn.Module):
     def __init__(self, embed_dim=512):
         super().__init__()
-        # self.in_conv = nn.Sequential(
-        #     nn.LayerNorm(embed_dim),
-        #     nn.Linear(embed_dim, embed_dim),
-        #     nn.GELU()
-        # )
-        
-        # self.out_conv = nn.Sequential(
-        #     nn.Linear(embed_dim, embed_dim // 2),
-        #     nn.GELU(),
-        #     nn.Linear(embed_dim // 2, embed_dim // 4),
-        #     nn.GELU(),
-        #     nn.Linear(embed_dim // 4, 2),
-        #     nn.LogSoftmax(dim=-1)
-        # )
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim//2)
-        self.L = nn.Linear(embed_dim, embed_dim//2, bias=False)
-        self.l1 = nn.Linear(embed_dim, embed_dim // 2, bias=False)
-        self.l2 = nn.Linear(embed_dim // 2, embed_dim // 4, bias=False)
-        self.l3 = nn.Linear(embed_dim // 4, 1, bias=False)
-        self.act = nn.GELU()
-        self.sigmoid = nn.Sigmoid()
-    
+        self.in_conv = nn.Sequential(
+            nn.LayerNorm(embed_dim),
+            nn.Linear(embed_dim, embed_dim),
+            nn.GELU()
+        )
+        self.out_conv = nn.Sequential(
+            nn.Linear(embed_dim + embed_dim // 2, embed_dim // 2),
+            nn.GELU(),
+            nn.Linear(embed_dim // 2, embed_dim // 4),
+            nn.GELU(),
+            nn.Linear(embed_dim // 4, 2),
+            nn.LogSoftmax(dim=-1)
+        )
 
-
-    def forward(self, x, noise_feature):   
+    def forward(self, x, policy, noise_feature):
+        x = self.in_conv(x)
         B, N, C = x.size()
-        x = self.act(self.L(self.norm1(x)))
-        # B, N, C = x.size()
-        # local_x = x[:,:, :C//2]
-        # global_x = (x[:,:, C//2:] * policy).sum(dim=1, keepdim=True) / torch.sum(policy, dim=1, keepdim=True)
- 
-        # x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
-        # x = self.out_conv(x)
-        x = torch.cat([x,noise_feature.expand(B,N,-1)], dim=-1)
-        x = self.act(self.l1(x))
-        x = self.act(self.l2(x))
-        x = self.sigmoid(self.l3(x))
-        return x
+        policy = policy.unsqueeze(-1)
+        noise_feature = noise_feature.squeeze(0)
+        local_x = x[:,:, :C//2]
+        global_x = (x[:,:, C//2:] * policy).sum(dim=1, keepdim=True) / torch.sum(policy, dim=1, keepdim=True)
+
+        x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
+        return self.out_conv(x)
     
 class info_mask_gen(nn.Module):
     def __init__(self, embed_dim=512):
@@ -336,61 +347,38 @@ class infoFSM(nn.Module):
             # return input_feature, new_tensor, curr_m
 
 class chanFSM(nn.Module):
-    def __init__(self, mask_num=11, embed_dim=512):
+    def __init__(self, mask_num=256, embed_dim=512):
         super().__init__()
         self.mask_generator = chan_mask_gen(embed_dim)
         self.mask_num = mask_num
         
-    def forward(self, input_feature, noise_feature, prev_m): 
+    def forward(self, input_feature, 
+                noise_feature,
+                prev_m, 
+                num_skip=1,
+                ratio=1.): 
         batch_size = input_feature.shape[0]
-        prob = self.mask_generator(input_feature, noise_feature)  # Z^g Z^l Z^c
-        self.STE = StraightThroughEstimator()
-        
+        prob = self.mask_generator(input_feature, prev_m, noise_feature).reshape(batch_size, -1, 2)  # Z^g Z^l Z^c
+        temp_feature = torch.zeros_like(input_feature).to(input_feature.device)
+        prev_m = prev_m.unsqueeze(-1)
+        noise_feature = noise_feature.squeeze(0)
         if self.training:
-            # curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0].squeeze() * prev_m
-            curr_m = prob.squeeze(-1)*prev_m
-            curr_m = self.STE(curr_m)
-            
-            # print("input_feature shape: ", input_feature.shape)
-            mask = curr_m.int()
-            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
-            
-            input_feature = input_feature*curr_m_
-            curr_m = curr_m+1e-10
-            return input_feature, mask, curr_m
+            curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1] * prev_m
+            return input_feature, curr_m, curr_m
         else:
-
-            curr_m = prob.squeeze(-1)*prev_m
-            curr_m = self.STE(curr_m)
-            
-            mask = curr_m.int()
-            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
-            # print(" prev_m: ",  prev_m.shape)
-            # print("input_feature shape: ", input_feature.shape)
-            curr_m_ = curr_m.unsqueeze(-1).expand(-1, -1, input_feature.shape[-1])
-            input_feature = input_feature * curr_m_
-            curr_m = curr_m+1e-10
-
-            keep_indices = [
-                row.nonzero().squeeze().tolist() if not isinstance(row.nonzero().squeeze().tolist(), int)
-                else [row.nonzero().squeeze().tolist()]
-                for row in mask
-            ]  
-            mask_indices = [[idx for idx in range(self.mask_num) if idx not in indices] for indices in keep_indices]  
+          
+            prob_kept = prob[:,:,0]    # Obtain the first one
             # prob_kept = torch.randn(prob_kept.shape).cuda()
-            num_kept = torch.floor(torch.max(torch.sum(mask, dim = 1))).to(dtype=torch.int)
-            num_kept = 1 if num_kept<1 else num_kept
-            # print(torch.floor(torch.mean(torch.sum(curr_m, dim = 1))).to(dtype=torch.int))
-            # print("number kept: ", num_kept)
-            for row in range(batch_size):
-                if len(keep_indices[row])<num_kept:
-                    selected_mask_indices = torch.randperm(len(mask_indices[row]))[:(num_kept-len(keep_indices[row]))].tolist()
-                    keep_indices[row] = keep_indices[row]+[mask_indices[row][i] for i in selected_mask_indices]
-                    
-            keep_indices = torch.tensor(keep_indices).to(input_feature.device)
-            input_feature = batch_index_select(input_feature, keep_indices)
-            mask = batch_index_select(mask, keep_indices)
-            return input_feature, mask, curr_m
+            total_token = torch.sum(prev_m)/batch_size
+            num_kept = (total_token * ratio).int()
+            curr_m = F.gumbel_softmax(prob, hard=True)[:, :, 0:1] * prev_m
+            keep_index = torch.argsort(prob_kept, dim=1, descending=True)[:, :num_kept]
+            # print(keep_index[0])
+            input_feature = batch_index_select(input_feature, keep_index)
+            curr_m = batch_index_select(prev_m, keep_index)
+            curr_m = curr_m.squeeze(-1)
+          
+            return input_feature, curr_m, curr_m
 
 
 def batch_index_select(x, idx):
@@ -678,6 +666,7 @@ class T5Stack(T5PreTrainedModel):
             self.FSMs = nn.ModuleList([infoFSM(mask_num=config.num_token) for _ in range(self.num_infoFSM)])
             for _ in range(self.num_chanFSM):
                 self.FSMs.append(chanFSM(mask_num=config.num_token))
+            self.rho = rho_function(1)
             self.noise_func = nn.Sequential(nn.Linear(1,16),nn.ReLU(),nn.Linear(16,64),
                         nn.ReLU(), nn.Linear(64, config.d_model//2),nn.ReLU())
             
@@ -760,7 +749,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        noise_std = 10**(-torch.FloatTensor([14.0])/20),
+        noise_std = 10**(-torch.FloatTensor([10.0])/20),
         mode='info',
         sparsity_loss = torch.tensor(0.0, dtype=torch.float32),
     ):
@@ -960,9 +949,10 @@ class T5Stack(T5PreTrainedModel):
                 else:
                     # print("In chanFSM")
                     noise_feature = self.noise_func(noise_std.to(input_ids.device).unsqueeze(1))
+                    rho = self.rho(noise_std.to(input_ids.device))
                     # print("hidden stante: ", hidden_states)
                     # print("curr_m: ", curr_m.shape)
-                    hidden_states, mask_dict_, curr_m = self.FSMs[d](input_feature=hidden_states, noise_feature=noise_feature, prev_m=attention_mask)
+                    hidden_states, mask_dict_, curr_m = self.FSMs[d](input_feature=hidden_states, noise_feature=noise_feature, prev_m=attention_mask, ratio = rho)
                     # print("currmask: ", curr_m.squeeze()[0])
                     # print("Attension mask: ", attention_mask[0])
                     # print("currmask: ", curr_m.squeeze()[0])
@@ -972,7 +962,7 @@ class T5Stack(T5PreTrainedModel):
                     confidence_rate_group = confidence_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
                     compression_rate_group = compression_rate_group + (torch.sum(curr_m, dim = 1),)
                     mask_dict = mask_dict + (mask_dict_,)
-                    compression_rates = compression_rate_group[-1]
+                    compression_rates = compression_rate_group[-1]/compression_rate_group[0]*compression_rate_group[0]
                     confidence_rate = confidence_rate_group[-1]
 
             elif not self.is_decoder:
@@ -980,6 +970,7 @@ class T5Stack(T5PreTrainedModel):
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
+                rho = 0
                 # print("compression rates: ", compression_rate)
             else:
                 mask_dict = mask_dict + (encoder_attention_mask,)
@@ -987,6 +978,7 @@ class T5Stack(T5PreTrainedModel):
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
+                rho = 0
             # print("compression rates: ", torch.mean(compression_rates))
 
 
@@ -1011,29 +1003,17 @@ class T5Stack(T5PreTrainedModel):
                 if v is not None
             )
         
-        if self.training:
-            return BaseModelSCOutputWithPastAndCrossAttentions(
-                last_hidden_state=hidden_states,
-                past_key_values=present_key_value_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                cross_attentions=all_cross_attentions,
-                compression_rates=compression_rates,
-                confidence_rate=confidence_rate,
-                mask_dict=mask_dict,
-                # sparsity_loss = sparsity_loss,
-            )
-        else:
-            return BaseModelSCOutputWithPastAndCrossAttentions(
-                last_hidden_state=hidden_states,
-                past_key_values=present_key_value_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                cross_attentions=all_cross_attentions,
-                compression_rates=compression_rates,
-                confidence_rate=confidence_rate,
-                mask_dict=mask_dict,
-            )
+        return BaseModelSCOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=present_key_value_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
+            compression_rates=compression_rates,
+            confidence_rate=confidence_rate,
+            mask_dict=mask_dict,
+            rho = rho,
+        )
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class T5SC_model(T5PreTrainedModel):
@@ -1233,7 +1213,7 @@ class T5SC_model(T5PreTrainedModel):
             SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
             # SNRdb = torch.FloatTensor([-6.0]).to(self.device)
         else:
-            SNRdb = torch.FloatTensor([14.0]).to(self.device)
+            SNRdb = torch.FloatTensor([10.0]).to(self.device)
         # print("Is training? ", self.training, "mode: ", mode, "SNR: ", SNRdb)
         noise_std = 10**(-SNRdb/20)
         
@@ -1261,15 +1241,17 @@ class T5SC_model(T5PreTrainedModel):
         
         if self.training:
             hidden_states = encoder_outputs[0]
-            compression_rate = encoder_outputs[-3]
-            confidence_rate = encoder_outputs[-2]
-            mask_dict = encoder_outputs[-1][-1]
+            compression_rate = encoder_outputs[-4]
+            confidence_rate = encoder_outputs[-3]
+            mask_dict = encoder_outputs[-2][-1]
+            rho = encoder_outputs[-1]
             # sparsity_loss = encoder_outputs[-1]
         else:
             hidden_states = encoder_outputs[0]
-            compression_rate = encoder_outputs[-3]
-            confidence_rate = encoder_outputs[-2]
-            mask_dict = encoder_outputs[-1][-1]
+            compression_rate = encoder_outputs[-4]
+            confidence_rate = encoder_outputs[-3]
+            mask_dict = encoder_outputs[-2][-1]
+            rho = encoder_outputs[-1]
 
         hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
         
@@ -1353,7 +1335,7 @@ class T5SC_model(T5PreTrainedModel):
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 0.0)+15*torch.mean(compression_rate)+1e3*codebook_loss
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+120*((rho-torch.mean(compression_rate))**2+rho)+1e3*codebook_loss
             # if task == 'sen':
             #     loss =  1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 0.0)+10*torch.mean(compression_rate)#+5*torch.mean(confidence_rate)
             # elif task == 'trans':
@@ -1363,6 +1345,8 @@ class T5SC_model(T5PreTrainedModel):
             #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.7, 0.0)+5e-1*torch.mean(compression_rate)#+1*torch.mean(confidence_rate)
             # print("SNR: ", SNRdb)
             # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
+            # print("Diff loss: ", (rho-torch.mean(compression_rate))**2+rho)
+            # print("rho: ", rho)
             # print("Loss from compression: ", torch.mean(compression_rate))
             # print("Loss from confidence: ", torch.mean(confidence_rate))
             # print("Loss from codebook: ", codebook_loss)
@@ -1467,7 +1451,7 @@ class T5SC_model(T5PreTrainedModel):
         self,input_ids: Optional[torch.LongTensor] = None, 
         attention_mask: Optional[torch.FloatTensor] = None
     ):
-        SNRdb = torch.FloatTensor([14.0]).to(self.device)
+        SNRdb = torch.FloatTensor([10.0]).to(self.device)
         noise_std = 10**(-SNRdb/20)
         encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1475,7 +1459,8 @@ class T5SC_model(T5PreTrainedModel):
                 noise_std = noise_std,
                 mode='chan'
             )
-        compression_rate = encoder_outputs[-3]
+        compression_rate = encoder_outputs[-4]
+        rho = encoder_outputs[-1]
         return torch.mean(compression_rate)
 
 def array_to_binaryarray(input_array, num_bits):

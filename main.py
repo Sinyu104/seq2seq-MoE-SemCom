@@ -11,7 +11,7 @@ import time
 import datetime
 import random
 from config import T5SC_config
-torch.set_printoptions(threshold=10_000)
+# torch.set_printoptions(threshold=10_000)
 from peft import LoraConfig, get_peft_model, TaskType
 
 
