@@ -179,13 +179,13 @@ class chan_mask_gen(nn.Module):
         #     nn.LogSoftmax(dim=-1)
         # )
         self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim//2)
         self.L = nn.Linear(embed_dim, embed_dim//2, bias=False)
         self.l1 = nn.Linear(embed_dim, embed_dim // 2, bias=False)
         self.l2 = nn.Linear(embed_dim // 2, embed_dim // 4, bias=False)
         self.l3 = nn.Linear(embed_dim // 4, 1, bias=False)
         self.act = nn.GELU()
         self.sigmoid = nn.Sigmoid()
+        
     
 
 
@@ -972,7 +972,7 @@ class T5Stack(T5PreTrainedModel):
                     confidence_rate_group = confidence_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
                     compression_rate_group = compression_rate_group + (torch.sum(curr_m, dim = 1),)
                     mask_dict = mask_dict + (mask_dict_,)
-                    compression_rates = compression_rate_group[-1]
+                    compression_rates = compression_rate_group[-1]/compression_rate_group[0]
                     confidence_rate = confidence_rate_group[-1]
 
             elif not self.is_decoder:
@@ -1083,8 +1083,11 @@ class T5SC_model(T5PreTrainedModel):
 
     def initial_weights(self):
         for name, module in self.named_modules():
-            if ('FSMs' in name or 'noise_func' in name) and (not 'bert' in name) and isinstance(module, nn.Linear):
+            if ('FSMs' in name) and (not 'bert' in name) and isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+            elif 'noise_func' in name and isinstance(module, nn.Linear):
                 init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
+                nn.init.zeros_(module.bias)
             elif ('gate' in name ) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
@@ -1302,7 +1305,7 @@ class T5SC_model(T5PreTrainedModel):
                 inputs_embeds=decoder_inputs_embeds,
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
-                encoder_attention_mask=attention_mask,
+                encoder_attention_mask=mask_dict,
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
                 use_cache=use_cache,
@@ -1353,7 +1356,7 @@ class T5SC_model(T5PreTrainedModel):
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 0.0)+15*torch.mean(compression_rate)+1e3*codebook_loss
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+100*torch.mean(compression_rate)+1e3*codebook_loss
             # if task == 'sen':
             #     loss =  1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 0.0)+10*torch.mean(compression_rate)#+5*torch.mean(confidence_rate)
             # elif task == 'trans':
