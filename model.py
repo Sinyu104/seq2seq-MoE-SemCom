@@ -203,6 +203,7 @@ class chan_mask_gen(nn.Module):
             nn.Linear(embed_dim // 4, 2),
             nn.LogSoftmax(dim=-1)
         )
+       
 
     def forward(self, x, policy, noise_feature):
         x = self.in_conv(x)
@@ -211,7 +212,6 @@ class chan_mask_gen(nn.Module):
         noise_feature = noise_feature.squeeze(0)
         local_x = x[:,:, :C//2]
         global_x = (x[:,:, C//2:] * policy).sum(dim=1, keepdim=True) / torch.sum(policy, dim=1, keepdim=True)
-
         x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
         return self.out_conv(x)
     
@@ -960,9 +960,12 @@ class T5Stack(T5PreTrainedModel):
                     input_shape = hidden_states.size()[:-1]
                     extended_attention_mask = self.get_extended_attention_mask(mask_dict_, input_shape)
                     confidence_rate_group = confidence_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
-                    compression_rate_group = compression_rate_group + (torch.sum(curr_m, dim = 1),)
+                    compression_rate_group = compression_rate_group + (torch.sum(curr_m, dim = 1).squeeze(),)
                     mask_dict = mask_dict + (mask_dict_,)
-                    compression_rates = compression_rate_group[-1]/compression_rate_group[0]*compression_rate_group[0]
+                    compression_rates = compression_rate_group[-1]/compression_rate_group[0]
+                    # print("compression_rates1: ", compression_rate_group[0])
+                    # print("compression_rates2: ", compression_rate_group[-1])
+                    # print("compression_rates: ", compression_rates)
                     confidence_rate = confidence_rate_group[-1]
 
             elif not self.is_decoder:
@@ -1063,8 +1066,11 @@ class T5SC_model(T5PreTrainedModel):
 
     def initial_weights(self):
         for name, module in self.named_modules():
-            if ('FSMs' in name or 'noise_func' in name) and (not 'bert' in name) and isinstance(module, nn.Linear):
-                init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
+            if ('FSMs' in name ) and (not 'bert' in name) and isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+            elif ('noise_func' in name) and isinstance(module, nn.Linear):
+                nn.init.kaiming_uniform_(module.weight, nonlinearity='relu')
+                nn.init.zeros_(module.bias)
             elif ('gate' in name ) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
