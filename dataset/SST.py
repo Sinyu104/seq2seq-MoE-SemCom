@@ -2,6 +2,7 @@ from transformers import AutoTokenizer
 import pytreebank
 from loguru import logger
 from torch.utils.data import Dataset
+import random
 
 
 
@@ -16,7 +17,7 @@ def get_binary_label(label):
 
 def set_prompt(idx = 0):
     prompt = [
-    """Review:\n{sentence}\nIs this sentence negative or positive?\n{options_}"""
+    """Review:\n{sentence}\nIs this review negative or positive?\n{options_}"""
 ]
     return prompt[idx]
 
@@ -30,12 +31,12 @@ class SST(Dataset):
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading SST dataset")
         sst = pytreebank.load_sst()
-        
         if train:
             self.sst = sst["train"]
             
         else:
             self.sst = sst["test"]
+        
         prompt = set_prompt(idx)
         options = set_options()
         self.data = []
@@ -46,7 +47,7 @@ class SST(Dataset):
                 inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
                 self.data.append((inputs, tokenizer(get_binary_label(tree.label), return_tensors="pt").input_ids))
                 # print("data: ",(inputs, tokenizer(get_binary_label(tree.label), return_tensors="pt").input_ids) )
-                
+        random.shuffle(self.data)       
                 
     def __len__(self):
         return len(self.data)

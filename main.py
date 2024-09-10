@@ -73,7 +73,8 @@ def main(args):
         test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
         print("On average: ")
         for task in args.test_task:
-            print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
+            print('[Task: %s], total testing samples %d: [loss: %f] [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['loss'][task], test_stats['score'][task], test_stats['compression rate'][task]))
+        print("test_stats: ", test_stats)
         save_result(args=args, dir=args.output_dir, test_stats=test_stats)
         sys.exit()
 
@@ -93,9 +94,9 @@ def main(args):
         if epoch%3==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
             save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
-        # print("On average: ")
-        # for task in args.test_task:
-        #     print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
+            # print("On average: ")
+            for task in args.test_task:
+                print('[Task: %s], total testing samples %d: [loss: %f] [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['loss'][task], test_stats['score'][task], test_stats['compression rate'][task]))
         # print(f'Epoch {epoch+1}, Learning Rate: {scheduler.get_last_lr()}')
         scheduler.step()
     test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
