@@ -88,6 +88,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Cosmos(train=is_train)
                         case 'agnews':
                             self.dataset_list[task] = Ag_news(train=is_train)
+                        case 'commonsense_qa':
+                            self.dataset_list[task] = Commonsense_QA(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -151,6 +153,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Cosmos(train=is_train)
                 case 'agnews':
                     SeperatedDataset[task]=Ag_news(train=is_train)
+                case 'commonsense_qa':
+                    SeperatedDataset[task]=Commonsense_QA(train=is_train)
 
         return SeperatedDataset
 
@@ -191,6 +195,8 @@ def task_metrics_mapping(args):
             metrics['cosmos'] = load("exact_match")
         elif task.lower() == 'agnews':
             metrics['agnews'] = load("exact_match")
+        elif task.lower() == 'commonsense_qa':
+            metrics['commonsense_qa'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
