@@ -4,18 +4,6 @@ from transformers import AutoTokenizer
 from loguru import logger
 import torch
 
-def get_binary_label(label):
-    """Convert fine-grained label to binary label."""
-    if label == 0:
-        return "World politics"
-    elif label == 1:
-        return "Sports"
-    elif label == 2:
-        return "Business"
-    elif label == 3:
-        return "Science and technology"
-    else:
-        raise ValueError("Invalid label")
 
 def set_prompt(idx = 0):
     prompt = [
