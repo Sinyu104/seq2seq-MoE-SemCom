@@ -11,9 +11,10 @@ def evaluate(args, model, testloader, device, print_freq=10):
     metrics = task_metrics_mapping(args)
     scores = {task: 0 for task in args.test_task}
     cr = {task: 0 for task in args.test_task}
+    loss = {task: 0 for task in args.test_task}
     cr_batch = {task: 0 for task in args.test_task}
     total = {task: 0 for task in args.test_task}
-    final = {'score': {task: 0 for task in args.test_task}, 'compression rate':{task: 0 for task in args.test_task}}
+    final = {'loss': {task: 0 for task in args.test_task}, 'score': {task: 0 for task in args.test_task}, 'compression rate':{task: 0 for task in args.test_task}}
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
     model.eval()
     for task in args.test_task:
@@ -27,6 +28,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
                     cr['sen'] += compression_rate.item()
                     cr_batch['sen'] += 1
                     outputs = model.generate(input_ids=texts, attention_mask=masks)
+                    loss['sen'] += model(input_ids=texts, attention_mask=masks, labels=targets, mode='chan', task=task).loss.item()
                     
                     for ii in range(batch_size):
                         predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
@@ -35,7 +37,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
                         scores['sen'] += result["exact_match"]
                         total['sen'] += 1
                     if (batch_idx+1) % print_freq == 0:
-                        print('[SEN] Test %d/%d: [score: %f] [compress rate: %f]' %((batch_idx+1)*batch_size, len(testloader['sen'].dataset), scores['sen']/total['sen'], cr['sen']/cr_batch['sen']))
+                        print('[SEN] Test %d/%d: [loss: %f] [score: %f] [compress rate: %f]' %((batch_idx+1)*batch_size, len(testloader['sen'].dataset), loss['sen']/cr_batch['sen'], scores['sen']/total['sen'], cr['sen']/cr_batch['sen']))
         elif task.lower() == 'trans':
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader['trans']):
@@ -82,6 +84,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
         else:
             raise NotImplementedError
     for task in args.test_task:
+        final['loss'][task] = loss[task]/cr_batch[task]
         final['score'][task] = scores[task]/total[task]
         final['compression rate'][task] = cr[task]/cr_batch[task]
     return final
@@ -91,7 +94,7 @@ def train(args, model, dataloader, optimizer, loss_scaler, device, mode, print_f
     task_loss = {task: 0 for task in args.train_task}
     cr = {task: 0 for task in args.train_task}
     task_batch = {task: 0 for task in args.train_task}
-    model.train()
+    model.train(True)
     optimizer.zero_grad()
     running_loss = torch.tensor(0.0).to(device)
 
