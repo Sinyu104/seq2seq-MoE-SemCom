@@ -34,7 +34,7 @@ class Ag_news(Dataset):
     def __init__(self, train=True, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-        logger.info("Loading boolq dataset")
+        logger.info("Loading Ag_news dataset")
         agnews = load_dataset("fancyzhx/ag_news")
         
         if train:

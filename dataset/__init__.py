@@ -14,4 +14,5 @@ from .ARC_easy import ARC_easy
 from .hellaswag import HellaSwag
 from .winogrande import Winogrande
 from .cosmos_qa import Cosmos
-from .ag_news import Ag_news
+from .Ag_news import Ag_news
+from .Commonsense_qa import Commonsense_QA
