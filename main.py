@@ -13,6 +13,7 @@ import random
 from config import T5SC_config
 torch.set_printoptions(threshold=10_000)
 from peft import LoraConfig, get_peft_model, TaskType
+from dataset.MMLU import subcategories
 
 
 def seed_inital(seed=0):
@@ -41,6 +42,7 @@ def main(args):
     #     lora_dropout=0.05,
     #     bias="none",
     #     modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts.0","DenseReluDense.experts.1","DenseReluDense.experts.2","mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
+    #     modules_to_save=["DenseReluDense.gate", "DenseReluDense.experts_0.0","DenseReluDense.experts_0.1","DenseReluDense.experts_0.2","DenseReluDense.experts_1.0","DenseReluDense.experts_1.1","DenseReluDense.experts_1.2", "mask_generator.L","mask_generator.l1","mask_generator.l2","mask_generator.l3"]
     #     )
     # # add LoRA adaptor
     # model = get_peft_model(model, lora_config)
@@ -61,10 +63,18 @@ def main(args):
 
     #### Get the test dataloader
     testset = build_dataset(is_train=False, args=args)
-    testloader = {task: torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
-                                                batch_size=args.batch_size, shuffle=False, drop_last = True)  
-                                                for task in args.test_task}
-    loss_scaler = NativeScaler()
+    testloader = {}
+    for task in args.test_task:
+        if task == 'mmlu':
+            subjects = list(subcategories.keys())
+            temploader = {subject: torch.utils.data.DataLoader(dataset=testset[task][subject], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)
+                                                        for subject in subjects}
+            testloader[task]=temploader
+        else:
+            testloader[task] = torch.utils.data.DataLoader(dataset=testset[task], num_workers=0, pin_memory=True,
+                                                        batch_size=args.batch_size, shuffle=False, drop_last = False)
+ 
     
     if args.eval:
         if testset == None:
@@ -89,9 +99,9 @@ def main(args):
     optimizer = torch.optim.AdamW(get_param_groups(model=model, mode='info'), lr = 1e-5) 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     for epoch in range(args.epochs):
-        train_stats = train(args=args, model=model, dataloader=batches, optimizer=optimizer, loss_scaler = loss_scaler, device=device, mode='chan')
+        train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, device=device, mode='info')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
-        if epoch%3==0:
+        if (epoch+1)%3==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
             save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
             # print("On average: ")
