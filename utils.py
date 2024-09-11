@@ -98,6 +98,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Adversarial_QA_dbidaf(train=is_train)
                         case 'gigaword':
                             self.dataset_list[task] = Gigaword(train=is_train)
+                        case 'wic':
+                            self.dataset_list[task] = WiC(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -171,6 +173,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Adversarial_QA_dbidaf(train=is_train)
                 case 'gigaword':
                     SeperatedDataset[task]=Gigaword(train=is_train)
+                case 'wic':
+                    SeperatedDataset[task]=WiC(train=is_train)
 
         return SeperatedDataset
 
@@ -221,6 +225,8 @@ def task_metrics_mapping(args):
             metrics['adversarial_qa_dbidaf'] = load("rouge")
         elif task.lower() == 'gigaword':
             metrics['gigaword'] = load("rouge")
+        elif task.lower() == 'wic':
+            metrics['wic'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
