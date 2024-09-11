@@ -1,8 +1,12 @@
+gpu_memory_usage.log
+cdr*
 __pycache__/
 dataset/__pycache__/
 dataset/MMLU_data/
-dataset/MultiRC
+dataset/MultiRC/
+pytorch-test.sh
 test.py
-LLMSC
+dataset/MMLU_data
+modelckpt*
 args.py
-modelckpt_*
+LLMSC

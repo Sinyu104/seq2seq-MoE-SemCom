@@ -419,20 +419,85 @@ def batch_index_select(x, idx):
     else:
         raise NotImplementedError
 
+# class T5DenseGatedActDense(nn.Module):
+#     def __init__(self, config: T5SC_config):
+#         super().__init__()
+#         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+#         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
+#         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+#         self.dropout = nn.Dropout(config.dropout_rate)
+#         self.act = ACT2FN[config.dense_act_fn]
+
+#     def forward(self, hidden_states):
+#         hidden_gelu = self.act(self.wi_0(hidden_states))
+#         hidden_linear = self.wi_1(hidden_states)
+#         hidden_states = hidden_gelu * hidden_linear
+#         hidden_states = self.dropout(hidden_states)
+
+#         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+#         # See https://github.com/huggingface/transformers/issues/20287
+#         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+#         if (
+#             isinstance(self.wo.weight, torch.Tensor)
+#             and hidden_states.dtype != self.wo.weight.dtype
+#             and self.wo.weight.dtype != torch.int8
+#         ):
+#             hidden_states = hidden_states.to(self.wo.weight.dtype)
+        
+        
+
+#         hidden_states = self.wo(hidden_states)
+#         sparsity_loss = 0
+
+#         return hidden_states, sparsity_loss
+
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config):
+    def __init__(self, config: T5SC_config, num_experts=10):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.experts_1 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
+        self.experts_0 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
+        self.sparsity_weight =1
+        # print(self.experts[0].weight)
+        # print(self.experts[1].weight)
 
-    def forward(self, hidden_states):
-        hidden_gelu = self.act(self.wi_0(hidden_states))
-        hidden_linear = self.wi_1(hidden_states)
-        hidden_states = hidden_gelu * hidden_linear
-        hidden_states = self.dropout(hidden_states)
+    def forward(self, hidden_states, k=2):
+        # Compute gate values
+        gate_values = self.gate(hidden_states)
+        
+        # Get top-2 experts
+        gate_probabilities , top_k_indices = torch.topk(gate_values, k, dim=-1)
+        # print("gate_probabilities: ", gate_probabilities)
+        gate_probabilities = F.softmax(gate_probabilities, dim=-1)
+        # print("gate_probabilities: ", gate_probabilities[0][0])
+        # print("top_k_indices: ", top_k_indices)
+        # print("gate_probabilities ", gate_probabilities.shape)
+        # print("hidden_states: ", hidden_states.shape)
+
+        # Calculate the output of the top-2 experts
+        outputs = torch.stack([self.act(self.experts_0[i](hidden_states))*self.experts_1[i](hidden_states) for i in range(self.num_experts)], dim=-1)
+        # print("outputs: ", outputs[0])
+        # print("outputs: ", outputs.shape)
+        batch_size, seq_len, hidden_dim, _ = outputs.shape
+        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, k, hidden_dim).permute(0, 1, 3, 2)
+        top2_outputs = torch.gather(outputs, -1, top2_experts_expanded)
+        # print("top2_experts_expanded: ", top2_experts_expanded.shape)
+        # print("top2_experts_expanded: ", top2_experts_expanded)
+        # print("top2_outputs: ", top2_outputs.shape)
+        # print("top2_outputs: ", top2_outputs[0])
+
+         # Combine the outputs from the top-2 experts
+        output = torch.sum(top2_outputs * gate_probabilities.unsqueeze(-2), dim=-1)
+        # print("output shape: ", output.shape)
+        # print("output: ", output[0])
+        hidden_states = self.dropout(output)
+        # print("output: ", output.shape)
+        # input("Stoppp")
 
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
@@ -449,25 +514,9 @@ class T5DenseGatedActDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
-# class T5DenseGatedActDense(nn.Module):
-#     def __init__(self, config: T5SC_config, num_experts=3):
-#         super().__init__()
-#         self.num_experts = num_experts
-#         self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
-#         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-#         self.experts = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
-#         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-#         self.dropout = nn.Dropout(config.dropout_rate)
-#         self.act = ACT2FN[config.dense_act_fn]
-#         self.sparsity_weight =1e-2
-#         # print(self.experts[0].weight)
-#         # print(self.experts[1].weight)
-
-#     def forward(self, hidden_states):
-#         # Compute gate values
-#         gate_values = self.gate(hidden_states)
-#         gate_probabilities = F.softmax(gate_values, dim=-1)
-#         # print("gate_probabilities: ", gate_probabilities)
+        # Compute sparsity regularization term
+        sparsity_loss = self.sparsity_regularization(gate_probabilities)
+        return hidden_states, sparsity_loss
 
 #         # Get top-2 experts
 #         top2_experts = torch.topk(gate_probabilities, 2, dim=-1).indices
@@ -1100,9 +1149,12 @@ class T5SC_model(T5PreTrainedModel):
             elif ('gate' in name ) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
-            # elif isinstance(module, T5DenseGatedActDense):
-            #     for layer in module.experts:
-            #         layer.weight.data.copy_(module.wi_1.weight.data)
+            elif isinstance(module, T5DenseGatedActDense):
+                for layer in module.experts_0:
+                    layer.weight.data.copy_(module.wi_0.weight.data)
+                for layer in module.experts_1:
+                    layer.weight.data.copy_(module.wi_1.weight.data)
+                
             elif ('lora_B' in name) and isinstance(module, nn.Linear):
                 init.uniform_(module.weight, a=-0.01, b=0.01)
             elif 'FSMs' in name and isinstance(module, nn.LayerNorm):
@@ -1366,8 +1418,12 @@ class T5SC_model(T5PreTrainedModel):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            # if self.training:
-            #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) + sparsity_loss
+            if self.training:
+                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) 
+            # if task == 'sen':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
+            # elif task == 'trans':
+            #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.7, 1e-3)# +torch.mean(compression_rate)
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.2, 0.0)+10*torch.mean(compression_rate)
