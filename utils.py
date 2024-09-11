@@ -98,6 +98,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Adversarial_QA_dbert(train=is_train)
                         case 'adversarial_qa_dbidaf':
                             self.dataset_list[task] = Adversarial_QA_dbidaf(train=is_train)
+                        case 'adversarial_qa_droberta':
+                            self.dataset_list[task] = Adversarial_QA_droberta(train=is_train)
                         case 'gigaword':
                             self.dataset_list[task] = Gigaword(train=is_train)
                         case 'wic':
@@ -173,6 +175,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Adversarial_QA_dbert(train=is_train)
                 case 'adversarial_qa_dbidaf':
                     SeperatedDataset[task]=Adversarial_QA_dbidaf(train=is_train)
+                case 'adversarial_qa_droberta':
+                    SeperatedDataset[task]=Adversarial_QA_droberta(train=is_train)
                 case 'gigaword':
                     SeperatedDataset[task]=Gigaword(train=is_train)
                 case 'wic':
@@ -225,6 +229,8 @@ def task_metrics_mapping(args):
             metrics['adversarial_qa_dbert'] = load("rouge")
         elif task.lower() == 'adversarial_qa_dbidaf':
             metrics['adversarial_qa_dbidaf'] = load("rouge")
+        elif task.lower() == 'adversarial_qa_droberta':
+            metrics['adversarial_qa_droberta'] = load("rouge")
         elif task.lower() == 'gigaword':
             metrics['gigaword'] = load("rouge")
         elif task.lower() == 'wic':
