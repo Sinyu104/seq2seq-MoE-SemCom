@@ -21,9 +21,9 @@ def get_model(args, config):
     
     # Stop gradient for pre-trained model
     for name, param in model.named_parameters():
-        if not ('FSM' in name or 'noise_func' in name):
-            param.requires_grad_(False)
-        if not ('gate' in name or 'expert' in name):
+        # if not ('FSM' in name or 'noise_func' in name):
+        #     param.requires_grad_(False)
+        if not ('gate' in name or 'expert' in name or 'codebook' in name):
             param.requires_grad_(False)
     return model
 
@@ -277,11 +277,11 @@ def get_param_groups(model, mode):
     if mode == 'info':
         for name, param in model.named_parameters():
             # params.append(param)
-            if 'FSM' in name or 'noise_func' in name:
-                params.append(param)
+            # if 'FSM' in name or 'noise_func' in name:
+            #     params.append(param)
             # else:
             #     pass
-            if 'gate' in name or 'expert' in name:
+            if 'gate' in name or 'expert' in name or 'codebook' in name:
                 params.append(param)
     else:
         for name, param in model.named_parameters():

@@ -452,9 +452,10 @@ def batch_index_select(x, idx):
 #         return hidden_states, sparsity_loss
 
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config, num_experts=10):
+    def __init__(self, config: T5SC_config, num_experts=1):
         super().__init__()
-        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.num_experts = num_experts
+        self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.experts_1 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
@@ -466,7 +467,7 @@ class T5DenseGatedActDense(nn.Module):
         # print(self.experts[0].weight)
         # print(self.experts[1].weight)
 
-    def forward(self, hidden_states, k=2):
+    def forward(self, hidden_states, k=1):
         # Compute gate values
         gate_values = self.gate(hidden_states)
         
@@ -1037,7 +1038,7 @@ class T5Stack(T5PreTrainedModel):
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
-                mask_dict = mask_dict + (encoder_attention_mask,)
+                mask_dict = mask_dict + (attention_mask,)
                 
             else:
                 mask_dict = mask_dict + (encoder_attention_mask,)
@@ -1045,7 +1046,6 @@ class T5Stack(T5PreTrainedModel):
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
-
 
 
         hidden_states = self.final_layer_norm(hidden_states)
@@ -1294,9 +1294,9 @@ class T5SC_model(T5PreTrainedModel):
             self.is_channel_disable=False
 
         if self.training:
-            snr_list = np.arange(-6, 16, 4)
-            SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
-            # SNRdb = torch.FloatTensor([20.0]).to(self.device)
+            # snr_list = np.arange(-6, 16, 4)
+            # SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
+            SNRdb = torch.FloatTensor([20.0]).to(self.device)
         else:
             SNRdb = torch.FloatTensor([10.0]).to(self.device)
         # print("Is training? ", self.training, "mode: ", mode, "SNR: ", SNRdb)
@@ -1339,8 +1339,8 @@ class T5SC_model(T5PreTrainedModel):
         
 
         hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
-        mask_dict_ = mask_dict.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
-        hidden_states = hidden_states*mask_dict_
+        # mask_dict_ = mask_dict.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
+        # hidden_states = hidden_states*mask_dict_
         
         
 
@@ -1418,15 +1418,14 @@ class T5SC_model(T5PreTrainedModel):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            if self.training:
-                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) 
+            loss = 1e4*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+ 1e3*codebook_loss
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':
             #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-2.7, 1e-3)# +torch.mean(compression_rate)
             # else:
             #     loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.2, 0.0)+10*torch.mean(compression_rate)
+            # loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.2, 0.0)+10*torch.mean(compression_rate)
             # if task == 'sen':
             #     loss =  1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 0.0)+10*torch.mean(compression_rate)#+5*torch.mean(confidence_rate)
             # elif task == 'trans':
