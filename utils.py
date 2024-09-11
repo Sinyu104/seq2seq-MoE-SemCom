@@ -92,6 +92,12 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Commonsense_QA(train=is_train)
                         case 'dream':
                             self.dataset_list[task] = Dream(train=is_train)
+                        case 'adversarial_qa_dbert':
+                            self.dataset_list[task] = Adversarial_QA_dbert(train=is_train)
+                        case 'adversarial_qa_dbidaf':
+                            self.dataset_list[task] = Adversarial_QA_dbidaf(train=is_train)
+                        case 'gigaword':
+                            self.dataset_list[task] = Gigaword(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -159,6 +165,12 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Commonsense_QA(train=is_train)
                 case 'dream':
                     SeperatedDataset[task]=Dream(train=is_train)
+                case 'adversarial_qa_dbert':
+                    SeperatedDataset[task]=Adversarial_QA_dbert(train=is_train)
+                case 'adversarial_qa_dbidaf':
+                    SeperatedDataset[task]=Adversarial_QA_dbidaf(train=is_train)
+                case 'gigaword':
+                    SeperatedDataset[task]=Gigaword(train=is_train)
 
         return SeperatedDataset
 
@@ -203,6 +215,12 @@ def task_metrics_mapping(args):
             metrics['commonsense_qa'] = load("exact_match")
         elif task.lower() == 'dream':
             metrics['dream'] = load("exact_match")
+        elif task.lower() == 'adversarial_qa_dbert':
+            metrics['adversarial_qa_dbert'] = load("rouge")
+        elif task.lower() == 'adversarial_qa_dbidaf':
+            metrics['adversarial_qa_dbidaf'] = load("rouge")
+        elif task.lower() == 'gigaword':
+            metrics['gigaword'] = load("rouge")
         else:
             raise NotImplementedError
     return metrics

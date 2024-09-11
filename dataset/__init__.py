@@ -17,3 +17,6 @@ from .cosmos_qa import Cosmos
 from .Ag_news import Ag_news
 from .Commonsense_qa import Commonsense_QA
 from .Dream import Dream
+from .Adversarial_QA_dbert import Adversarial_QA_dbert
+from .Adversarial_QA_dbidaf import Adversarial_QA_dbidaf
+from .Gigaword import Gigaword
