@@ -16,3 +16,4 @@ from .winogrande import Winogrande
 from .cosmos_qa import Cosmos
 from .Ag_news import Ag_news
 from .Commonsense_qa import Commonsense_QA
+from .Dream import Dream
