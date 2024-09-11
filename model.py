@@ -1369,8 +1369,6 @@ class T5SC_model(T5PreTrainedModel):
             # print("Average compression rate: ", torch.mean(compression_rate))
             if self.training:
                 loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)) 
-            else:
-                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':
