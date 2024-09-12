@@ -31,7 +31,7 @@ class ARC_easy(Dataset):
             self.arc = arc["train"]
             
         else:
-            self.arc = arc["test"]
+            self.arc = arc["test"].select(range(1000))
             
         prompt = set_prompt(prompt_idx)
         options = set_options(prompt_idx)
