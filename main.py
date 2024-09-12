@@ -84,7 +84,6 @@ def main(args):
         print("On average: ")
         for task in args.test_task:
             print('[Task: %s], total testing samples %d: [loss: %f] [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['loss'][task], test_stats['score'][task], test_stats['compression rate'][task]))
-        print("test_stats: ", test_stats)
         save_result(args=args, dir=args.output_dir, test_stats=test_stats)
         sys.exit()
 
