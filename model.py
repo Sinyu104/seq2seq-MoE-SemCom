@@ -513,54 +513,15 @@ class T5DenseGatedActDense(nn.Module):
         
 
         hidden_states = self.wo(hidden_states)
-        return hidden_states
-
         # Compute sparsity regularization term
         sparsity_loss = self.sparsity_regularization(gate_probabilities)
         return hidden_states, sparsity_loss
 
-#         # Get top-2 experts
-#         top2_experts = torch.topk(gate_probabilities, 2, dim=-1).indices
-#         # print("top2_experts: ", top2_experts)
+    def sparsity_regularization(self, gate_probabilities):
+        # Compute entropy-based sparsity regularization term
+        sparsity_loss = -torch.sum(gate_probabilities * torch.log(gate_probabilities + 1e-10))  # Add a small constant for numerical stability
+        return self.sparsity_weight * sparsity_loss
 
-#         # Calculate the output of the top-2 experts
-#         outputs = torch.stack([self.experts[i](hidden_states) for i in range(self.num_experts)], dim=-1)
-
-#         # Gather outputs from the top-2 experts
-#         batch_size, seq_len, hidden_dim, _ = outputs.shape
-#         top2_experts_expanded = top2_experts.unsqueeze(-1).expand(batch_size, seq_len, 2, hidden_dim)
-#         top2_outputs = torch.gather(outputs, -1, top2_experts_expanded).permute(0, 1, 3, 2)
-#         # print("top2_outputs: ", top2_outputs)
-
-#         # Combine the outputs from the top-2 experts
-#         top2_probabilities = torch.gather(gate_probabilities, -1, top2_experts)
-#         top2_probabilities = top2_probabilities / top2_probabilities.sum(dim=-1, keepdim=True)
-#         # print("top2_probabilities: ", top2_probabilities)
-#         output = torch.sum(top2_outputs * top2_probabilities.unsqueeze(-2), dim=-1)
-#         hidden_states = self.dropout(output)
-
-#         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
-#         # See https://github.com/huggingface/transformers/issues/20287
-#         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-#         if (
-#             isinstance(self.wo.weight, torch.Tensor)
-#             and hidden_states.dtype != self.wo.weight.dtype
-#             and self.wo.weight.dtype != torch.int8
-#         ):
-#             hidden_states = hidden_states.to(self.wo.weight.dtype)
-        
-
-#         hidden_states = self.wo(hidden_states)
-
-#         # Compute sparsity regularization term
-#         sparsity_loss = self.sparsity_regularization(gate_probabilities)
-
-#         return hidden_states, sparsity_loss
-
-#     def sparsity_regularization(self, gate_probabilities):
-#         # Compute entropy-based sparsity regularization term
-#         sparsity_loss = -torch.sum(gate_probabilities * torch.log(gate_probabilities + 1e-10))  # Add a small constant for numerical stability
-#         return self.sparsity_weight * sparsity_loss
 
 class T5LayerFF(nn.Module):
     def __init__(self, config: T5SC_config):
@@ -577,7 +538,7 @@ class T5LayerFF(nn.Module):
     def forward(self, hidden_states):
         
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states)
+        forwarded_states, sparsity_loss = self.DenseReluDense(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         
         return hidden_states
@@ -1337,8 +1298,7 @@ class T5SC_model(T5PreTrainedModel):
             mask_dict = encoder_outputs[-1][-1]
 
         
-
-        hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
+        # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
         # mask_dict_ = mask_dict.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
         # hidden_states = hidden_states*mask_dict_
         
@@ -1388,6 +1348,7 @@ class T5SC_model(T5PreTrainedModel):
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
                 encoder_attention_mask=mask_dict.int(),
+                # encoder_attention_mask=mask_dict.int(),
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
                 use_cache=use_cache,
@@ -1418,7 +1379,7 @@ class T5SC_model(T5PreTrainedModel):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = 1e4*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+ 1e3*codebook_loss
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':

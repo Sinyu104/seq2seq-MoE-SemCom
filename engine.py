@@ -85,9 +85,7 @@ def evaluate(args, model, testloader, device, print_freq=10):
                     for ii in range(batch_size):
                         predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
                         labels = tokenizer.decode(targets[ii], skip_special_tokens=True)
-                        print("predicted: ", predicted)
                         result = metrics[task].compute(predictions=[predicted], references=[labels])
-                        print("result: ", result)
                         scores[task] += result[next(iter(result))]
                         total[task] += 1
                     if batch_idx % print_freq == 0:
