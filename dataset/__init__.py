@@ -22,3 +22,4 @@ from .Adversarial_QA_dbidaf import Adversarial_QA_dbidaf
 from .Adversarial_QA_droberta import Adversarial_QA_droberta
 from .Gigaword import Gigaword
 from .WiC import WiC
+from .Common_gen import Common_gen

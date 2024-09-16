@@ -5,6 +5,9 @@ from torch.cuda.amp import autocast
 from dataset.MMLU import subcategories
 import numpy as np
 
+from datasets import load_dataset
+from torch.utils.data import Dataset
+
 
 
 
@@ -71,6 +74,27 @@ def evaluate(args, model, testloader, device, print_freq=10):
                     if batch_idx % print_freq == 0:
                         print('[MMLU][%s] Test %d/%d: [score: %f] ' %(subject, batch_idx*batch_size, len(testloader['mmlu'][subject].dataset), score_per_subject[subject]/batch_per_subject[subject]))# , cr['qa']/cr_batch['qa']
             print('[MMLU][Average] Test %d subjects: [score: %f] ' %( len(subjects), scores['mmlu']/total['mmlu']))
+        elif task.lower() == 'common_gen':
+            references = load_dataset("GEM/common_gen")["validation"]['references']
+            references = np.expand_dims(np.array(references, dtype=object), axis=-1)
+            with torch.no_grad():
+                for batch_idx, data in enumerate(testloader[task]):
+                    texts, masks = data[0]['input_ids'].squeeze(1).to(device, non_blocking=True), data[0]['attention_mask'].squeeze(1).to(device, non_blocking=True)
+                    targets = data[1].squeeze(1).to(device, non_blocking=True)
+                    batch_size = targets.shape[0]
+                    compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
+                    cr[task] += compression_rate.item()
+                    cr_batch[task] += 1
+                    outputs = model.generate(input_ids=texts, attention_mask=masks)
+                    loss[task] += model(input_ids=texts, attention_mask=masks, labels=targets, mode='chan', task=task).loss.item()
+                    for ii in range(batch_size):
+                        predicted = tokenizer.decode(outputs[ii], skip_special_tokens=True)
+                        result = metrics[task].compute(predictions=[predicted], references=references[batch_idx*batch_size+ii])
+                        scores[task] += result[next(iter(result))]
+                        total[task] += 1
+                    if batch_idx % print_freq == 0:
+                        print('[%s] Test %d/%d: [loss: %f] [score: %f] [compress rate: %f]' %(task, batch_idx*batch_size, len(testloader[task].dataset), loss[task]/cr_batch[task], scores[task]/total[task], cr[task]/cr_batch[task]))
+
         else:
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader[task]):

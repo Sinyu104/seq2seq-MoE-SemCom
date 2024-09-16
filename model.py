@@ -452,7 +452,7 @@ def batch_index_select(x, idx):
 #         return hidden_states, sparsity_loss
 
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config, num_experts=10):
+    def __init__(self, config: T5SC_config, num_experts=1):
         super().__init__()
         self.num_experts = num_experts
         self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
@@ -467,7 +467,7 @@ class T5DenseGatedActDense(nn.Module):
         # print(self.experts[0].weight)
         # print(self.experts[1].weight)
 
-    def forward(self, hidden_states, k=2):
+    def forward(self, hidden_states, k=1):
         # Compute gate values
         gate_values = self.gate(hidden_states)
         
@@ -1347,7 +1347,7 @@ class T5SC_model(T5PreTrainedModel):
                 inputs_embeds=decoder_inputs_embeds,
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
-                encoder_attention_mask=mask_dict.int(),
+                encoder_attention_mask=attention_mask,
                 # encoder_attention_mask=mask_dict.int(),
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
@@ -1379,7 +1379,7 @@ class T5SC_model(T5PreTrainedModel):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e3*codebook_loss
+            loss = 1e4*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e3*codebook_loss
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':

@@ -95,7 +95,7 @@ def main(args):
     start_time = time.time()
     
     # Training loop
-    optimizer = torch.optim.AdamW(get_param_groups(model=model, mode='info'), lr = 1e-5) 
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr = 1e-5) 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     for epoch in range(args.epochs):
         train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, device=device, mode='info')
