@@ -21,8 +21,8 @@ def get_model(args, config):
     
     # Stop gradient for pre-trained model
     # for name, param in model.named_parameters():
-        # if not ('FSM' in name or 'noise_func' in name):
-        #     param.requires_grad_(False)
+    #     if not ('FSM' in name or 'noise_func' in name):
+    #         param.requires_grad_(False)
         # if ('gate' in name or 'expert' in name or 'codebook' in name):
         #     param.requires_grad = True
         # else: 
@@ -43,6 +43,17 @@ def load_ckpt(args, model):
     saved_model_data = torch.load(args.resume)
     config = saved_model_data['config'] if 'config' in saved_model_data else AutoConfig.from_pretrained("google/flan-t5-small")
     # args = saved_model_data['args'] if 'config' in saved_model_data else args
+    model_state_dict = model.state_dict()
+    for k in saved_model_data['model_state_dict']:
+        if k in model_state_dict:
+            if saved_model_data['model_state_dict'][k].shape != model_state_dict[k].shape:
+                logger.info(f"Skip loading parameter: {k}, "
+                            f"required shape: {model_state_dict[k].shape}, "
+                            f"loaded shape: {saved_model_data['model_state_dict'][k].shape}")
+                saved_model_data['model_state_dict'][k] = model_state_dict[k]
+                
+        else:
+            logger.info(f"Dropping parameter {k}")
     model.load_state_dict(saved_model_data['model_state_dict'], strict=False)
 
     return model, config, args

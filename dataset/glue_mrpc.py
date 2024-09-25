@@ -50,7 +50,7 @@ class Glue_mrpc(Dataset):
             self.mrpc = mrpc["train"]
             
         else:
-            self.mrpc = mrpc["test"]
+            self.mrpc = mrpc["test"].select(range(1000))
 
         prompt = set_prompt(prompt_idx)
         options = set_options(prompt_idx)

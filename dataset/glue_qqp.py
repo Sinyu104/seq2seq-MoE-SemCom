@@ -52,7 +52,7 @@ class Glue_qqp(Dataset):
             self.qqp = qqp["train"].select(range(5000))
             
         else:
-            self.qqp = qqp["test"].select(range(2000))
+            self.qqp = qqp["test"].select(range(1000))
 
         prompt = set_prompt(prompt_idx)
         options = set_options(prompt_idx)

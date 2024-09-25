@@ -16,7 +16,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from args import T5_START_DOCSTRING, PARALLELIZE_DOCSTRING, DEPARALLELIZE_DOCSTRING, T5_INPUTS_DOCSTRING, _CONFIG_FOR_DOC
 
 from transformers.activations import ACT2FN
-from transformers import  BertConfig, BertModel, T5EncoderModel, BertGenerationEncoder, ViTModel, T5Model, T5ForConditionalGeneration, T5PreTrainedModel
+from transformers import  BertConfig, BertModel, T5EncoderModel, BertGenerationEncoder, ViTModel, T5Model, T5ForTokenClassification, T5PreTrainedModel
 from transformers.models.t5.modeling_t5 import T5LayerSelfAttention, T5LayerNorm, T5LayerCrossAttention, T5DenseActDense
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.utils import (
@@ -32,7 +32,7 @@ from transformers.utils import ModelOutput
 import warnings
 from config import T5SC_config
 from dataclasses import dataclass
-from modulator import qam_mod, qam_mapper, qam_demapper, channel_Awgn
+from modulator import qam_mod, qam_mapper, qam_demapper, channel_Awgn, PowerNormalize
 logger = logging.get_logger(__name__)
 
 @dataclass
@@ -142,7 +142,6 @@ class BaseModelSCOutputWithPastAndCrossAttentions(ModelOutput):
     compression_rates: Optional[Tuple[torch.FloatTensor, ...]] = None
     confidence_rate:  Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_dict: Optional[Tuple[torch.FloatTensor, ...]] = None
-    sparsity_loss: torch.FloatTensor = None
 
 
 class STEFunction(autograd.Function):
@@ -179,7 +178,7 @@ class chan_mask_gen(nn.Module):
         #     nn.Linear(embed_dim // 4, 2),
         #     nn.LogSoftmax(dim=-1)
         # )
-        self.bert = BertModel.from_pretrained('google/bert_uncased_L-2_H-512_A-8')
+        self.TokenClassification = T5ForTokenClassification.from_pretrained('google/flan-t5-small', num_labels=1)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.L = nn.Linear(embed_dim, embed_dim//2)
         self.l1 = nn.Linear(embed_dim , embed_dim // 2)
@@ -203,9 +202,12 @@ class chan_mask_gen(nn.Module):
         # x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
         # x = self.out_conv(x)
         x = torch.cat([x,noise_feature.expand(B,N,-1)], dim=-1)
-        x = self.act(self.l1(x))
-        x = self.act(self.l2(x))
-        x = self.sigmoid(self.l3(x))
+        x = self.TokenClassification(inputs_embeds=x).logits
+        # print("logits: ", x)
+        # x = self.act(self.l1(x))
+        # x = self.act(self.l2(x))
+        x = self.sigmoid(x)
+        # print("logits: ", x)
         return x
     
 class info_mask_gen(nn.Module):
@@ -452,7 +454,7 @@ def batch_index_select(x, idx):
 #         return hidden_states, sparsity_loss
 
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config, num_experts=1):
+    def __init__(self, config: T5SC_config, num_experts=30):
         super().__init__()
         self.num_experts = num_experts
         self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
@@ -467,7 +469,7 @@ class T5DenseGatedActDense(nn.Module):
         # print(self.experts[0].weight)
         # print(self.experts[1].weight)
 
-    def forward(self, hidden_states, k=1):
+    def forward(self, hidden_states, k=2):
         # Compute gate values
         gate_values = self.gate(hidden_states)
         
@@ -968,6 +970,7 @@ class T5Stack(T5PreTrainedModel):
                 if d<self.num_infoFSM:
                     hidden_states, mask_dict_, curr_m = self.FSMs[d](input_feature=hidden_states, attention_mask=attention_mask, prev_m=attention_mask)
                     # hidden_states = hidden_states * curr_m.unsqueeze(-1)
+                    
                     input_shape = hidden_states.size()[:-1]
                     extended_attention_mask = self.get_extended_attention_mask(mask_dict_, input_shape)
                     confidence_rate_group = confidence_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
@@ -995,7 +998,7 @@ class T5Stack(T5PreTrainedModel):
                     confidence_rate = confidence_rate_group[-1]
 
             elif not self.is_decoder:
-                compression_rate_group = compression_rate_group + (torch.sum(attention_mask, dim = 1),)
+                compression_rate_group = compression_rate_group + (torch.sum(attention_mask.float(), dim = 1),)
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
@@ -1030,29 +1033,17 @@ class T5Stack(T5PreTrainedModel):
                 if v is not None
             )
         
-        if self.training:
-            return BaseModelSCOutputWithPastAndCrossAttentions(
-                last_hidden_state=hidden_states,
-                past_key_values=present_key_value_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                cross_attentions=all_cross_attentions,
-                compression_rates=compression_rates,
-                confidence_rate=confidence_rate,
-                mask_dict=mask_dict,
-                # sparsity_loss = sparsity_loss,
-            )
-        else:
-            return BaseModelSCOutputWithPastAndCrossAttentions(
-                last_hidden_state=hidden_states,
-                past_key_values=present_key_value_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
-                cross_attentions=all_cross_attentions,
-                compression_rates=compression_rates,
-                confidence_rate=confidence_rate,
-                mask_dict=mask_dict,
-            )
+        
+        return BaseModelSCOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=present_key_value_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
+            compression_rates=compression_rates,
+            confidence_rate=confidence_rate,
+            mask_dict=mask_dict,
+        )
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class T5SC_model(T5PreTrainedModel):
@@ -1087,10 +1078,10 @@ class T5SC_model(T5PreTrainedModel):
         self.weight_decay = config.weight_decay
         self.distortion = config.distortion
 
-        self.bit_per_digit = 4
-        self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
-                                        embedding_dim=config.d_model,
-                                        quan_bits=self.bit_per_digit)
+        # self.bit_per_digit = 4
+        # self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
+        #                                 embedding_dim=config.d_model,
+        #                                 quan_bits=self.bit_per_digit)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1102,7 +1093,7 @@ class T5SC_model(T5PreTrainedModel):
 
     def initial_weights(self):
         for name, module in self.named_modules():
-            if ('FSMs' in name) and (not 'bert' in name) and isinstance(module, nn.Linear):
+            if ('FSMs' in name) and (not 'TokenClassification' in name) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
             elif 'noise_func' in name and isinstance(module, nn.Linear):
                 init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
@@ -1255,8 +1246,8 @@ class T5SC_model(T5PreTrainedModel):
             self.is_channel_disable=False
 
         if self.training:
-            # snr_list = np.arange(-6, 16, 4)
-            # SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
+            snr_list = np.arange(2, 26, 4)
+            SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
             SNRdb = torch.FloatTensor([20.0]).to(self.device)
         else:
             SNRdb = torch.FloatTensor([10.0]).to(self.device)
@@ -1285,22 +1276,18 @@ class T5SC_model(T5PreTrainedModel):
         #     )
         
         
-        if self.training:
-            hidden_states = encoder_outputs[0]
-            compression_rate = encoder_outputs[-3]
-            confidence_rate = encoder_outputs[-2]
-            mask_dict = encoder_outputs[-1][-1]
-            # sparsity_loss = encoder_outputs[-1]
-        else:
-            hidden_states = encoder_outputs[0]
-            compression_rate = encoder_outputs[-3]
-            confidence_rate = encoder_outputs[-2]
-            mask_dict = encoder_outputs[-1][-1]
-
         
-        hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb)
+        hidden_states = encoder_outputs.last_hidden_state
+        compression_rate = encoder_outputs.compression_rates
+        confidence_rate = encoder_outputs.confidence_rate
+        mask_dict = encoder_outputs.mask_dict[-1]
+           
+        # power = PowerNormalize(hidden_states, compression_rate)
+        # hidden_states = channel_Awgn(hidden_states, power, noise_std, mask_dict)
+        # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
         # mask_dict_ = mask_dict.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
         # hidden_states = hidden_states*mask_dict_
+        # print("hidden_states: ", hidden_states)
         
         
 
@@ -1347,8 +1334,8 @@ class T5SC_model(T5PreTrainedModel):
                 inputs_embeds=decoder_inputs_embeds,
                 past_key_values=past_key_values,
                 encoder_hidden_states=hidden_states,
-                encoder_attention_mask=attention_mask,
-                # encoder_attention_mask=mask_dict.int(),
+                # encoder_attention_mask=attention_mask,
+                encoder_attention_mask=mask_dict.int(),
                 head_mask=decoder_head_mask,
                 cross_attn_head_mask=cross_attn_head_mask,
                 use_cache=use_cache,
@@ -1379,7 +1366,7 @@ class T5SC_model(T5PreTrainedModel):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = 1e4*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e3*codebook_loss
+            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':
@@ -1508,7 +1495,7 @@ class T5SC_model(T5PreTrainedModel):
                 noise_std = noise_std,
                 mode='chan'
             )
-        compression_rate = encoder_outputs[-3]
+        compression_rate = encoder_outputs.compression_rates
         return torch.mean(compression_rate)
 
 def array_to_binaryarray(input_array, num_bits):
@@ -1521,14 +1508,15 @@ def binaryarray_to_array(binary_array, num_bits):
 
 
 # Settings
-M =16  # modulation order
+M = 16  # modulation order
         # signal-to-noise ratio
 channel = 'awgn'  # channel type
 mapping_table, demapping_table = qam_mod(M)
 print(mapping_table)
 
-def commun_sim(data_dec, snr=18, quan_bits=8):
+def commun_sim(data_dec, snr=18, quan_bits=8, mask=None):
     data_dec = data_dec.cpu().numpy().flatten()
+    mask = mask.cpu().detach().numpy().flatten()
     # print("data_dec: ", data_dec)
     
     data_bin = array_to_binaryarray(data_dec, quan_bits)
@@ -1542,7 +1530,7 @@ def commun_sim(data_dec, snr=18, quan_bits=8):
 
 
     # Wireless Channel
-    rx_symbols = channel_Awgn(tx_symbols, snr=snr)
+    rx_symbols = channel_Awgn(tx_symbols, snr=snr, mask=mask)
     # rx_symbols = channel_Rayleigh(tx_symbols, snr=snr)
     # rx_symbols = channel_Rician(tx_symbols, snr=snr)
     # M-QAM Demodulation
@@ -1577,7 +1565,7 @@ class VectorQuantizer(nn.Module):
         self.embedding = nn.Embedding(self.K, self.D)
         self.embedding.weight.data.uniform_(-1 / self.K, 1 / self.K)
 
-    def forward(self, latents, snr=5):
+    def forward(self, latents, snr=5, mask=None):
         latents = latents # [B x L x D]
         latents_shape = latents.shape
         flat_latents = latents.view(-1, self.D)  # [BL x D]
@@ -1591,8 +1579,8 @@ class VectorQuantizer(nn.Module):
         # print("embedding: ", self.embedding.weight)
         encoding_inds = torch.argmin(dist, dim=1).unsqueeze(1)  # [BL, 1]
         shape = encoding_inds.shape
-        # print("encoding_inds: ", encoding_inds)
-        Rx_signal = commun_sim(encoding_inds, snr=snr, quan_bits=self.quan_bits)
+        
+        Rx_signal = commun_sim(encoding_inds, snr=snr, quan_bits=self.quan_bits, mask=mask)
         encoding_inds = torch.from_numpy(Rx_signal).reshape(shape).to(latents.device)
   
         
@@ -1611,6 +1599,10 @@ class VectorQuantizer(nn.Module):
         embedding_loss = F.mse_loss(quantized_latents, latents.detach())
 
         vq_loss = commitment_loss * self.beta + embedding_loss
+
+        # perplexity
+        e_mean = torch.mean(encoding_one_hot, dim=0)
+        perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
 
         # Add the residue back to the latents
         quantized_latents = latents + (quantized_latents - latents).detach()

@@ -36,7 +36,7 @@ class Anli(Dataset):
         anli = load_dataset("facebook/anli")
 
         if train:
-            self.anli = concatenate_datasets([anli["train_r1"].select(range(10000)), anli["train_r2"].select(range(10000)), anli["train_r3"].select(range(10000))])
+            self.anli = concatenate_datasets([anli["train_r1"].select(range(5000)), anli["train_r2"].select(range(5000)), anli["train_r3"].select(range(5000))])
             
         else:
             self.anli = concatenate_datasets([anli["test_r1"].select(range(1000)), anli["test_r2"].select(range(1000)), anli["test_r3"].select(range(1200))])

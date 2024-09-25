@@ -47,7 +47,7 @@ class labeled_final(Dataset):
             self.labeled_final = labeled_final["train"].select(range(1000))
             
         else:
-            self.labeled_final = labeled_final["test"].select(range(2000))
+            self.labeled_final = labeled_final["test"].select(range(1000))
 
         prompt = set_prompt(prompt_idx)
         options = set_options(prompt_idx)

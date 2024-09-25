@@ -2,6 +2,7 @@ import math
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.ndimage.filters import gaussian_filter1d
+import torch
 
 def qam_mod(M):
     """
@@ -91,8 +92,16 @@ def qam_demapper(syms, demap_table):
     bits = np.array([int(_) for _ in bits_str])
     return bits
 
+def PowerNormalize(x, mask):
+    B, N, C = x.shape
+    x_square = torch.mul(x, x)
+    power = (torch.sum(x_square, dim=(1, 2))/mask/C).sqrt()
+    power = power.view(-1, 1, 1)
+    # x = torch.div(x, power)
+    
+    return power
 
-def channel_Awgn(tx_signal, snr, output_power=False):
+def channel_Awgn(tx_signal, snr, mask):
     """
         AWGN channel model.
 
@@ -105,13 +114,13 @@ def channel_Awgn(tx_signal, snr, output_power=False):
         -------
         bits: array(num_bit, ). Demodulated bits.
     """
+    # Rx_sig = Tx_sig + power.sqrt()*torch.normal(0, n_var.item(), size=Tx_sig.shape).to(Tx_sig.device) * mask.unsqueeze(-1).expand(-1, -1, Tx_sig.shape[-1])
+    # return Rx_sig
     signal_power = np.mean(abs(tx_signal ** 2))
     # print(signal_power)
-    n_var = signal_power * 10 ** (- snr / 10)  # calculate noise power based on signal power and SNR
-    if output_power:
-        print(f"SNR: {snr}. RX Signal power: {signal_power}. Noise power: {n_var}")
+    n_var = signal_power * 10 ** (- snr / 10)
     # Generate complex noise
-    noise = math.sqrt(n_var/2) * (np.random.randn(*tx_signal.shape)+1j*np.random.randn(*tx_signal.shape))
+    noise = math.sqrt(n_var/2) * (np.random.randn(*tx_signal.shape)+1j*np.random.randn(*tx_signal.shape))*mask
     return tx_signal + noise
 
 
