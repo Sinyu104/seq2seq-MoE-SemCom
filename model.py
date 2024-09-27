@@ -421,86 +421,20 @@ def batch_index_select(x, idx):
     else:
         raise NotImplementedError
 
-# class T5DenseGatedActDense(nn.Module):
-#     def __init__(self, config: T5SC_config):
-#         super().__init__()
-#         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-#         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-#         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-#         self.dropout = nn.Dropout(config.dropout_rate)
-#         self.act = ACT2FN[config.dense_act_fn]
-
-#     def forward(self, hidden_states):
-#         hidden_gelu = self.act(self.wi_0(hidden_states))
-#         hidden_linear = self.wi_1(hidden_states)
-#         hidden_states = hidden_gelu * hidden_linear
-#         hidden_states = self.dropout(hidden_states)
-
-#         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
-#         # See https://github.com/huggingface/transformers/issues/20287
-#         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
-#         if (
-#             isinstance(self.wo.weight, torch.Tensor)
-#             and hidden_states.dtype != self.wo.weight.dtype
-#             and self.wo.weight.dtype != torch.int8
-#         ):
-#             hidden_states = hidden_states.to(self.wo.weight.dtype)
-        
-        
-
-#         hidden_states = self.wo(hidden_states)
-#         sparsity_loss = 0
-
-#         return hidden_states, sparsity_loss
-
 class T5DenseGatedActDense(nn.Module):
-    def __init__(self, config: T5SC_config, num_experts=30):
+    def __init__(self, config: T5SC_config):
         super().__init__()
-        self.num_experts = num_experts
-        self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
-        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.experts_1 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
-        self.experts_0 = nn.ModuleList([nn.Linear(config.d_model, config.d_ff, bias=False) for _ in range(num_experts)])
+        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
-        self.sparsity_weight =1
-        # print(self.experts[0].weight)
-        # print(self.experts[1].weight)
 
-    def forward(self, hidden_states, k=2):
-        # Compute gate values
-        gate_values = self.gate(hidden_states)
-        
-        # Get top-2 experts
-        gate_probabilities , top_k_indices = torch.topk(gate_values, k, dim=-1)
-        # print("gate_probabilities: ", gate_probabilities)
-        gate_probabilities = F.softmax(gate_probabilities, dim=-1)
-        # print("gate_probabilities: ", gate_probabilities[0][0])
-        # print("top_k_indices: ", top_k_indices)
-        # print("gate_probabilities ", gate_probabilities.shape)
-        # print("hidden_states: ", hidden_states.shape)
-
-        # Calculate the output of the top-2 experts
-        outputs = torch.stack([self.act(self.experts_0[i](hidden_states))*self.experts_1[i](hidden_states) for i in range(self.num_experts)], dim=-1)
-        # print("outputs: ", outputs[0])
-        # print("outputs: ", outputs.shape)
-        batch_size, seq_len, hidden_dim, _ = outputs.shape
-        top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, k, hidden_dim).permute(0, 1, 3, 2)
-        top2_outputs = torch.gather(outputs, -1, top2_experts_expanded)
-        # print("top2_experts_expanded: ", top2_experts_expanded.shape)
-        # print("top2_experts_expanded: ", top2_experts_expanded)
-        # print("top2_outputs: ", top2_outputs.shape)
-        # print("top2_outputs: ", top2_outputs[0])
-
-         # Combine the outputs from the top-2 experts
-        output = torch.sum(top2_outputs * gate_probabilities.unsqueeze(-2), dim=-1)
-        # print("output shape: ", output.shape)
-        # print("output: ", output[0])
-        hidden_states = self.dropout(output)
-        # print("output: ", output.shape)
-        # input("Stoppp")
+    def forward(self, hidden_states):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
 
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
@@ -511,10 +445,67 @@ class T5DenseGatedActDense(nn.Module):
             and self.wo.weight.dtype != torch.int8
         ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
-        
-        
 
         hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+class T5MoEDenseGatedActDense(nn.Module):
+    def __init__(self, config: T5SC_config):
+        super().__init__()
+        self.num_experts = config.num_expert
+        self.gate = nn.Linear(config.d_model, self.num_experts, bias=False)
+        self.experts = nn.ModuleDict()
+        for idx in range(self.num_experts):
+            self.experts[f"expert_{idx}"] = T5DenseGatedActDense(config)
+        self.sparsity_weight =1
+        # print(self.experts[0].weight)
+        # print(self.experts[1].weight)
+
+    def forward(self, hidden_states, k=1):
+        # Compute gate values
+        gate_values = self.gate(hidden_states)
+        
+        # Get top-2 experts
+        gate_probabilities , top_k_indices = torch.topk(gate_values, k, dim=-1)
+        gate_probabilities = F.softmax(gate_probabilities, dim=-1)
+        # print("gate_probabilities: ", gate_probabilities[0][0])
+        # print("top_k_indices: ", top_k_indices)
+        # print("gate_probabilities ", gate_probabilities.shape)
+        # print("hidden_states: ", hidden_states.shape)
+
+        # Calculate the output of the top-2 experts
+        # outputs = torch.stack([self.act(self.experts_0[i](hidden_states))*self.experts_1[i](hidden_states) for i in range(self.num_experts)], dim=-1)
+        # print("outputs: ", outputs[0])
+        # print("outputs: ", outputs.shape)
+        # batch_size, seq_len, hidden_dim, _ = outputs.shape
+        # top2_experts_expanded = top_k_indices.unsqueeze(-1).expand(batch_size, seq_len, k, hidden_dim).permute(0, 1, 3, 2)
+        # top2_outputs = torch.gather(outputs, -1, top2_experts_expanded)
+        # print("top2_experts_expanded: ", top2_experts_expanded.shape)
+        # print("top2_experts_expanded: ", top2_experts_expanded)
+        # print("top2_outputs: ", top2_outputs.shape)
+        # print("top2_outputs: ", top2_outputs[0])
+        next_states = hidden_states.clone()
+        batch_size, seq_len = hidden_states.shape[0], hidden_states.shape[1]
+        mask = torch.zeros((batch_size, seq_len, self.num_experts), dtype=torch.bool, device = top_k_indices.device)
+        for i in range(k):
+            mask.scatter_(2, top_k_indices[..., i:i+1], 1)
+
+        mask = mask.bool()
+        idx_mask = mask.transpose(1, 2).reshape(batch_size * seq_len, self.num_experts).sum(dim=0)
+        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[
+            0
+        ].tolist()  # length: number of "activated" expert / value: index
+        for idx in idx_mask:
+            next_states[mask[:, :, idx]] = getattr(self.experts, "expert_{}".format(idx))(
+                hidden_states[mask[:, :, idx]]
+            )
+
+         # Combine the outputs from the top-2 experts
+        hidden_states = gate_probabilities * next_states
+
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
         # Compute sparsity regularization term
         sparsity_loss = self.sparsity_regularization(gate_probabilities)
         return hidden_states, sparsity_loss
@@ -529,8 +520,8 @@ class T5LayerFF(nn.Module):
     def __init__(self, config: T5SC_config):
         super().__init__()
         if config.is_gated_act:
-            self.DenseReluDense = T5DenseGatedActDense(config)
-            # self.DenseReluDense = T5MoEDenseGatedActDense(config)
+            # self.DenseReluDense = T5DenseGatedActDense(config)
+            self.DenseReluDense = T5MoEDenseGatedActDense(config)
         else:
             self.DenseReluDense = T5DenseActDense(config)
 
@@ -1078,10 +1069,10 @@ class T5SC_model(T5PreTrainedModel):
         self.weight_decay = config.weight_decay
         self.distortion = config.distortion
 
-        # self.bit_per_digit = 4
-        # self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
-        #                                 embedding_dim=config.d_model,
-        #                                 quan_bits=self.bit_per_digit)
+        self.bit_per_digit = 5
+        self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
+                                        embedding_dim=config.d_model,
+                                        quan_bits=self.bit_per_digit)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1091,7 +1082,25 @@ class T5SC_model(T5PreTrainedModel):
         self.device_map = None
         
 
-    def initial_weights(self):
+    def initial_weights(self, config):
+        for block_idx in range(config.num_layers):
+            w_0_weight = getattr(self.decoder.block[block_idx].layer[2].DenseReluDense.experts.expert_0, 'wi_0').weight
+            w_1_weight = getattr(self.decoder.block[block_idx].layer[2].DenseReluDense.experts.expert_0, 'wi_1').weight
+            wo_weight = getattr(self.decoder.block[block_idx].layer[2].DenseReluDense.experts.expert_0, 'wo').weight
+            # Copy expert_0's weight to expert_1
+            for expert in range(config.num_expert):
+                getattr(self.decoder.block[block_idx].layer[2].DenseReluDense.experts, f"expert_{expert}").wi_0.weight.data.copy_(w_0_weight.data)
+                getattr(self.decoder.block[block_idx].layer[2].DenseReluDense.experts, f"expert_{expert}").wi_1.weight.data.copy_(w_1_weight.data)
+                getattr(self.decoder.block[block_idx].layer[2].DenseReluDense.experts, f"expert_{expert}").wo.weight.data.copy_(wo_weight.data)
+        for block_idx in range(config.num_layers):
+            w_0_weight = getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts.expert_0, 'wi_0').weight
+            w_1_weight = getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts.expert_0, 'wi_1').weight
+            wo_weight = getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts.expert_0, 'wo').weight
+            # Copy expert_0's weight to expert_1
+            for expert in range(config.num_expert):
+                getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wi_0.weight.data.copy_(w_0_weight.data)
+                getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wi_1.weight.data.copy_(w_1_weight.data)
+                getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wo.weight.data.copy_(wo_weight.data)
         for name, module in self.named_modules():
             if ('FSMs' in name) and (not 'TokenClassification' in name) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
@@ -1101,11 +1110,8 @@ class T5SC_model(T5PreTrainedModel):
             elif ('gate' in name ) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
-            elif isinstance(module, T5DenseGatedActDense):
-                for layer in module.experts_0:
-                    layer.weight.data.copy_(module.wi_0.weight.data)
-                for layer in module.experts_1:
-                    layer.weight.data.copy_(module.wi_1.weight.data)
+            elif 'codebook.embedding' in name: 
+                module.weight.data.uniform_(-1 / 2**self.bit_per_digit, 1 / 2**self.bit_per_digit)
                 
             elif ('lora_B' in name) and isinstance(module, nn.Linear):
                 init.uniform_(module.weight, a=-0.01, b=0.01)
@@ -1131,6 +1137,7 @@ class T5SC_model(T5PreTrainedModel):
         )
         assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
+        self.codebook.to(self.decoder.first_device)
         self.decoder.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.decoder.first_device)
         self.model_parallel = True
@@ -1284,10 +1291,8 @@ class T5SC_model(T5PreTrainedModel):
            
         # power = PowerNormalize(hidden_states, compression_rate)
         # hidden_states = channel_Awgn(hidden_states, power, noise_std, mask_dict)
-        # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
-        # mask_dict_ = mask_dict.unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
-        # hidden_states = hidden_states*mask_dict_
-        # print("hidden_states: ", hidden_states)
+        hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
+        
         
         
 
@@ -1365,8 +1370,9 @@ class T5SC_model(T5PreTrainedModel):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
+            codebook_loss = codebook_loss.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e3*codebook_loss
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':
@@ -1508,7 +1514,7 @@ def binaryarray_to_array(binary_array, num_bits):
 
 
 # Settings
-M = 16  # modulation order
+M = 32  # modulation order
         # signal-to-noise ratio
 channel = 'awgn'  # channel type
 mapping_table, demapping_table = qam_mod(M)
@@ -1592,8 +1598,8 @@ class VectorQuantizer(nn.Module):
 
         # Quantize the latents
         quantized_latents = torch.matmul(encoding_one_hot, self.embedding.weight)  # [BL, D]
-        quantized_latents = quantized_latents.view(latents_shape)  # [B x L x D]
-
+        quantized_latents = quantized_latents.view(latents_shape)*mask.unsqueeze(-1).expand(-1, -1, latents_shape[-1])  # [B x L x D]
+    
         # Compute the VQ Losses
         commitment_loss = F.mse_loss(quantized_latents.detach(), latents)
         embedding_loss = F.mse_loss(quantized_latents, latents.detach())

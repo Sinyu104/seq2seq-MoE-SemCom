@@ -95,55 +95,6 @@ def evaluate(args, model, testloader, device, print_freq=100):
                         total[task] += 1
                     if batch_idx % print_freq == 0:
                         print('[%s] Test %d/%d: [loss: %f] [score: %f] [compress rate: %f]' %(task, batch_idx*batch_size, len(testloader[task].dataset), loss[task]/cr_batch[task], scores[task]/total[task], cr[task]/cr_batch[task]))
-
-        # elif task.lower() == 'commonsense_qa':
-        #     for batch_idx, data in enumerate(testloader[task]):
-        #         texts, masks = data[0]['input_ids'].squeeze(1).to(device), data[0]['attention_mask'].squeeze(1).to(device)
-        #         targets = data[1].squeeze(1).to(device)
-        #         batch_size = targets.shape[0]
-        #         compression_rate = model.get_compression_rate(input_ids=texts, attention_mask=masks)
-        #         cr[task] += compression_rate.item()
-        #         cr_batch[task] += 1
-        #         labels = []
-        #         for token_ids in targets:
-        #             labels.append(tokenizer.decode(token_ids, skip_special_tokens=True))
-        #         decoder_input_ids = tokenizer("", return_tensors="pt").input_ids.expand(batch_size, 1).to(device)
-        #         decoder_input_ids = model._shift_right(decoder_input_ids)
-        #         logits = model(
-        #             input_ids=texts, decoder_input_ids=decoder_input_ids
-        #         ).logits
-        #         probs = (
-        #             torch.nn.functional.softmax(
-        #                 torch.index_select(
-        #                     logits, 2,
-        #                     torch.tensor(
-        #                         [
-        #                             tokenizer("A").input_ids[0],
-        #                             tokenizer("B").input_ids[0],
-        #                             tokenizer("C").input_ids[0],
-        #                             tokenizer("D").input_ids[0],
-        #                             tokenizer("E").input_ids[0],
-        #                         ]
-        #                     ).to(device)
-                            
-        #                 ),
-        #                 dim=2,
-        #             )
-        #         )
-        #         print(probs)
-        #         max_indices = torch.argmax(probs, dim=2).squeeze().cpu().numpy().tolist() 
-        #         max_indices = max_indices if isinstance(max_indices,list) else [max_indices]
-        #         predicted_labels = [["A", "B", "C", "D", "E"][index] for index in max_indices]
-        #         print("predicted_labels: ", predicted_labels)
-        #         print("labels: ", labels)
-
-                
-        #         result = metrics[task].compute(predictions=predicted_labels, references=labels)
-        #         scores[task] += result[next(iter(result))]
-        #         print(result[next(iter(result))])
-        #         total[task] += 1
-        #         if batch_idx % print_freq == 0:
-        #             print('[%s] Test %d/%d: [loss: %f] [score: %f] [compress rate: %f]' %(task, batch_idx*batch_size, len(testloader[task].dataset), loss[task]/cr_batch[task], scores[task]/total[task], cr[task]/cr_batch[task]))
         else:
             with torch.no_grad():
                 for batch_idx, data in enumerate(testloader[task]):
@@ -179,8 +130,8 @@ def train(args, model, dataloader, optimizer, device, mode, print_freq=100, accu
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
 
     for i, data_batch in enumerate(dataloader):
-        texts, masks = data_batch[0]['input_ids'].squeeze(1).to(device), data_batch[0]['attention_mask'].squeeze(1).to(device)
-        targets = data_batch[1].squeeze(1).to(device)
+        texts, masks = data_batch[0]['input_ids'].squeeze(1).to(next(model.parameters()).device), data_batch[0]['attention_mask'].squeeze(1).to(next(model.parameters()).device)
+        targets = data_batch[1].squeeze(1).to(next(model.parameters()).device)
         task = data_batch[2][0]
         
 
@@ -207,6 +158,7 @@ def train(args, model, dataloader, optimizer, device, mode, print_freq=100, accu
     if (i + 1) % accumulation_steps != 0:
         optimizer.step()
         optimizer.zero_grad()
+        torch.cuda.synchronize()
     
     avg_cr = {task: cr[task]/task_batch[task] for task in args.train_task}
         

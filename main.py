@@ -16,6 +16,8 @@ from peft import LoraConfig, get_peft_model, TaskType
 from dataset.MMLU import subcategories
 
 
+
+
 def seed_inital(seed=0):
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -25,15 +27,14 @@ def seed_inital(seed=0):
 
 
 
-
 def main(args):
     #### Get the Model
     seed_inital(seed=args.seed)
+    init_distributed_mode(args)
     device=torch.device(args.device)
     config=T5SC_config()
     model = get_model(args, config=config)
     
-    model.initial_weights()
     # Define LoRA Config
     # lora_config = LoraConfig(
     #     r=4,
@@ -50,8 +51,17 @@ def main(args):
     param_train, param_percent = count_parameters(model)
     logger.info(f"Trainable parameters: {param_train/1e6}M ({param_percent}%).")
     if args.resume:
-        model, config, args = load_ckpt(args, model)
-    model.to(device)
+        model, config, args = load_ckpt(args, model, config)
+    model.initial_weights(config)
+
+    
+
+    # model.to(device)
+    model_without_ddp = model
+    if args.distributed:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model_without_ddp = model.module  
+    
 
     #### Get the data and dataloader
     trainset = build_dataset(is_train=True, args=args)
@@ -135,7 +145,8 @@ def main(args):
             print('[Task: %s], total testing samples %d: [score: %f] [compress rate: %f]' %(task.upper(), len(testloader[task].dataset), test_stats['score'][task], test_stats['compression rate'][task]))
     save_model(args=args, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
     
-    
+    # Tear down the process group
+    dist.destroy_process_group()
 
 
 

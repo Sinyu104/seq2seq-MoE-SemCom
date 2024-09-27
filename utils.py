@@ -10,6 +10,7 @@ from dataset import *
 from torch.utils.data import Dataset
 from evaluate import load
 from torch.cuda.amp import GradScaler
+from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
 
 
@@ -17,8 +18,12 @@ from torch.cuda.amp import GradScaler
 
 def get_model(args, config):
     print(f"Creating model: {args.model}")
-    model = T5SC_model.from_pretrained(pretrained_model_name_or_path=args.pretrain_model, config=config)
-    
+    # with init_empty_weights():
+    #     model = T5SC_model(config)
+    # model = load_checkpoint_and_dispatch(
+    #     model, checkpoint='modelckpt_2024-09-26_03-30-13/model.pth', device_map="auto", no_split_module_classes=['Block']
+    # )
+    model = T5SC_model.from_pretrained(pretrained_model_name_or_path=args.pretrain_model, config=config, device_map="auto")
     # Stop gradient for pre-trained model
     # for name, param in model.named_parameters():
     #     if not ('FSM' in name or 'noise_func' in name):
@@ -38,11 +43,40 @@ def count_parameters(model):
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return trainable_params, (trainable_params / total_params) * 100
 
-def load_ckpt(args, model):
+def load_ckpt(args, model, config=None):
     print(f"Load checkpoint: {args.resume}")
     saved_model_data = torch.load(args.resume)
-    config = saved_model_data['config'] if 'config' in saved_model_data else AutoConfig.from_pretrained("google/flan-t5-small")
+    config = config if config is not None else (saved_model_data['config'] if 'config' in saved_model_data else AutoConfig.from_pretrained("google/flan-t5-small"))
     # args = saved_model_data['args'] if 'config' in saved_model_data else args
+    # new_state_dict = {}
+    # for key, value in saved_model_data['model_state_dict'].items():
+    #     # Look for keys that match the layers and submodules you want to rename
+    #     if "DenseReluDense.wi_0.weight" in key:
+    #         # Change the key to include 'experts.expert0'
+    #         new_key = key.replace(
+    #             "DenseReluDense.wi_0.weight",  # Original part of the key
+    #             "DenseReluDense.experts.expert_0.wi_0.weight"  # New part of the key
+    #         )
+    #         new_state_dict[new_key] = value
+    #     elif "DenseReluDense.wi_1.weight" in key:
+    #         # Similarly change other parts as needed, for example wi_1
+    #         new_key = key.replace(
+    #             "DenseReluDense.wi_1.weight",
+    #             "DenseReluDense.experts.expert_0.wi_1.weight"
+    #         )
+    #         new_state_dict[new_key] = value
+    #     elif "DenseReluDense.wo.weight" in key:
+    #         # Similarly change other parts as needed, for example wi_1
+    #         new_key = key.replace(
+    #             "DenseReluDense.wo.weight",
+    #             "DenseReluDense.experts.expert_0.wo.weight"
+    #         )
+    #         new_state_dict[new_key] = value
+    #     else:
+    #         # Keep other keys the same
+    #         new_state_dict[key] = value
+    # saved_model_data['model_state_dict'] = new_state_dict
+    
     model_state_dict = model.state_dict()
     for k in saved_model_data['model_state_dict']:
         if k in model_state_dict:
@@ -119,6 +153,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = WiC(train=is_train)
                         case 'common_gen':
                             self.dataset_list[task] = Common_gen(train=is_train)
+                        case 'quartz':
+                            self.dataset_list[task] = Quartz(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -198,6 +234,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=WiC(train=is_train)
                 case 'common_gen':
                     SeperatedDataset[task]=Common_gen(train=is_train)
+                case 'quartz':
+                    SeperatedDataset[task]=Common_gen(train=is_train)
 
         return SeperatedDataset
 
@@ -254,9 +292,67 @@ def task_metrics_mapping(args):
             metrics['wic'] = load("exact_match")
         elif task.lower() == 'common_gen':
             metrics['common_gen'] = load("sacrebleu")
+        elif task.lower() == 'quartz':
+            metrics['quartz'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
+
+def is_main_process():
+    return get_rank() == 0
+
+def save_on_master(*args, **kwargs):
+    if is_main_process():
+        torch.save(*args, **kwargs)
+
+def setup_for_distributed(is_master):
+    """
+    This function disables printing when not in master process
+    """
+    import builtins as __builtin__
+    builtin_print = __builtin__.print
+
+    def print(*args, **kwargs):
+        force = kwargs.pop('force', False)
+        if is_master or force:
+            builtin_print(*args, **kwargs)
+
+    __builtin__.print = print
+
+
+def init_distributed_mode(args):
+    if args.dist_on_itp:
+        args.rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
+        args.world_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
+        args.gpu = int(os.environ['OMPI_COMM_WORLD_LOCAL_RANK'])
+        args.dist_url = "tcp://%s:%s" % (os.environ['MASTER_ADDR'], os.environ['MASTER_PORT'])
+        os.environ['LOCAL_RANK'] = str(args.gpu)
+        os.environ['RANK'] = str(args.rank)
+        os.environ['WORLD_SIZE'] = str(args.world_size)
+        # ["RANK", "WORLD_SIZE", "MASTER_ADDR", "MASTER_PORT", "LOCAL_RANK"]
+    elif 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+        args.rank = int(os.environ["RANK"])
+        args.world_size = int(os.environ['WORLD_SIZE'])
+        args.gpu = int(os.environ['LOCAL_RANK'])
+    elif 'SLURM_PROCID' in os.environ:
+        args.rank = int(os.environ['SLURM_PROCID'])
+        args.gpu = args.rank % torch.cuda.device_count()
+    else:
+        print('Not using distributed mode')
+        args.distributed = False
+        return
+
+    args.distributed = True
+
+    torch.cuda.set_device(args.gpu)
+    args.dist_backend = 'nccl'
+    print('| distributed init (rank {}): {}, gpu {}'.format(
+        args.rank, args.dist_url, args.gpu), flush=True)
+    torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+                                         world_size=args.world_size, rank=args.rank)
+    torch.distributed.barrier()
+    # setup_for_distributed(args.rank == 0)
+
 
 
 def save_model(args, model, config, dir='', train_stats=None, test_stats=None):
