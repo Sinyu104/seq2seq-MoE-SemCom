@@ -25,3 +25,4 @@ from .WiC import WiC
 from .Common_gen import Common_gen
 from .Quartz import Quartz
 from .Social_IQA import Social_IQA
+from .Quoref import Quoref

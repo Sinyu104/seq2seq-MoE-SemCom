@@ -973,12 +973,7 @@ class T5Stack(T5PreTrainedModel):
                 else:
                     # print("In chanFSM")
                     noise_feature = self.noise_func(noise_std.to(input_ids.device).unsqueeze(1))
-                    # print("hidden stante: ", hidden_states)
-                    # print("curr_m: ", curr_m.shape)
                     hidden_states, mask_dict_, curr_m = self.FSMs[d](input_ids = input_ids, input_feature=hidden_states, noise_feature=noise_feature, prev_m=attention_mask)
-                    # print("currmask: ", curr_m.squeeze()[0])
-                    # print("Attension mask: ", attention_mask[0])
-                    # print("currmask: ", curr_m.squeeze()[0])
                     
                     input_shape = hidden_states.size()[:-1]
                     extended_attention_mask = self.get_extended_attention_mask(mask_dict_, input_shape)
@@ -1069,10 +1064,10 @@ class T5SC_model(T5PreTrainedModel):
         self.weight_decay = config.weight_decay
         self.distortion = config.distortion
 
-        self.bit_per_digit = 5
-        self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
-                                        embedding_dim=config.d_model,
-                                        quan_bits=self.bit_per_digit)
+        # self.bit_per_digit = 5
+        # self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
+        #                                 embedding_dim=config.d_model,
+        #                                 quan_bits=self.bit_per_digit)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1137,7 +1132,7 @@ class T5SC_model(T5PreTrainedModel):
         )
         assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
-        self.codebook.to(self.decoder.first_device)
+        # self.codebook.to(self.decoder.first_device)
         self.decoder.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.decoder.first_device)
         self.model_parallel = True
@@ -1291,7 +1286,7 @@ class T5SC_model(T5PreTrainedModel):
            
         # power = PowerNormalize(hidden_states, compression_rate)
         # hidden_states = channel_Awgn(hidden_states, power, noise_std, mask_dict)
-        hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
+        # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
         
         
         
@@ -1370,9 +1365,9 @@ class T5SC_model(T5PreTrainedModel):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
-            codebook_loss = codebook_loss.to(lm_logits.device)
+            # codebook_loss = codebook_loss.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e3*codebook_loss
+            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':
