@@ -36,7 +36,7 @@ class HellaSwag(Dataset):
             self.hella = hella["train"].select(range(10000))
             
         else:
-            self.hella = hella["validation"].select(range(1500))
+            self.hella = hella["validation"].select(range(1000))
         
 
         prompt = set_prompt(prompt_idx)

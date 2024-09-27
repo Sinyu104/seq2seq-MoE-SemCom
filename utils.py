@@ -155,6 +155,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Common_gen(train=is_train)
                         case 'quartz':
                             self.dataset_list[task] = Quartz(train=is_train)
+                        case 'social_i_qa':
+                            self.dataset_list[task] = Social_IQA(train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -236,6 +238,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Common_gen(train=is_train)
                 case 'quartz':
                     SeperatedDataset[task]=Common_gen(train=is_train)
+                case 'social_i_qa':
+                    SeperatedDataset[task]=Social_IQA(train=is_train)
 
         return SeperatedDataset
 
@@ -294,6 +298,8 @@ def task_metrics_mapping(args):
             metrics['common_gen'] = load("sacrebleu")
         elif task.lower() == 'quartz':
             metrics['quartz'] = load("exact_match")
+        elif task.lower() == 'social_i_qa':
+            metrics['social_i_qa'] = load("exact_match")
         else:
             raise NotImplementedError
     return metrics
