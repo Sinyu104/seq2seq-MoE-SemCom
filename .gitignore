@@ -4,9 +4,10 @@ __pycache__/
 dataset/__pycache__/
 dataset/MMLU_data/
 dataset/MultiRC/
-pytorch-test.sh
+execute.sh
 test.py
 dataset/MMLU_data
 modelckpt*
 args.py
 LLMSC
+config.py
