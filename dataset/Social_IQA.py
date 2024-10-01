@@ -13,7 +13,7 @@ def get_binary_label(label):
     else:
         raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """{context}\nBased on the paragraph above can we answer the question that "{question}".?\n{options_}""",
 ]
@@ -25,9 +25,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """social_iqa context: {context}\n social_iqa question:{question}""",
+]
+    return prompt[idx]
 
 class Social_IQA(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading Social IQA dataset")
@@ -40,16 +45,20 @@ class Social_IQA(Dataset):
             self.social_i_qa = social_i_qa["validation"].select(range(1000))
         
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.social_i_qa:
             input_text = prompt.replace("{context}", sample['context'])
             input_text = input_text.replace("{question}", sample['question'])
-            input_text = input_text.replace("{options_}", options)
-            input_text = input_text.replace("{options_1}", sample['answerA'])
-            input_text = input_text.replace("{options_2}", sample['answerB'])
-            input_text = input_text.replace("{options_3}", sample['answerC'])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                input_text = input_text.replace("{options_1}", sample['answerA'])
+                input_text = input_text.replace("{options_2}", sample['answerB'])
+                input_text = input_text.replace("{options_3}", sample['answerC'])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if torch.sum(inputs['attention_mask']) >=256:
                 continue

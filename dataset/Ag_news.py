@@ -17,7 +17,7 @@ def get_binary_label(label):
     else:
         raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """What label best describes this news article?\n{Passage}\n{options_}""",
 ]
@@ -29,9 +29,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """ag_news passage:{Passage}""",
+]
+
 
 class Ag_news(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading Ag_news dataset")
@@ -43,13 +48,16 @@ class Ag_news(Dataset):
         else:
             self.agnews = agnews["test"].select(range(1000))
         
-
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.agnews:
             input_text = prompt.replace("{Passage}", sample['text'])
-            input_text = input_text.replace("{options_}", options)
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if torch.sum(inputs['attention_mask']) >=256:
                 continue

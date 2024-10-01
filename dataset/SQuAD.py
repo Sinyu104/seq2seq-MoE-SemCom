@@ -3,15 +3,22 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from loguru import logger
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """Answer based on context:\n\n{context}\n\n{question}"""
 ]
     return prompt[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """squad context: {context}\nsquad question: {question}"""
+]
+    return prompt[idx]
+
+
 
 class SQuAD(Dataset):
-    def __init__(self, train=True, idx = 0):
+    def __init__(self, train=True, stop_flan=False,idx = 0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading SQuAD dataset")
@@ -22,7 +29,10 @@ class SQuAD(Dataset):
         else:
             self.squad = squad["test"]
         
-        prompt = set_prompt(idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(idx)
+        else:
+            prompt = set_prompt(idx)
         self.data = []
         for example in self.squad:
             input_text = prompt.replace("{context}", example["context"])

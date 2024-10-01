@@ -5,7 +5,7 @@ from loguru import logger
 import torch
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
      """Read the below conversation.\n{Dialogue}\n{Question}\n{options_}""",
 ]
@@ -17,9 +17,16 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+     """dream dialogue: {Dialogue}\ndream question: {Question}""",
+]
+    return prompt[idx]
+
+
 
 class Dream(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading Dream dataset")
@@ -31,17 +38,21 @@ class Dream(Dataset):
         else:
             self.dream = dream["test"].select(range(1000))
         
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.dream:
             dialogue = merged_dialogue = ' '.join(sample['dialogue'])
             input_text = prompt.replace("{Dialogue}", dialogue)
             input_text = input_text.replace("{Question}", sample['question'])
-            input_text = input_text.replace("{options_}", options)
-            input_text = input_text.replace("{options_1}", sample['choice'][0])
-            input_text = input_text.replace("{options_2}", sample['choice'][1])
-            input_text = input_text.replace("{options_3}", sample['choice'][2])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                input_text = input_text.replace("{options_1}", sample['choice'][0])
+                input_text = input_text.replace("{options_2}", sample['choice'][1])
+                input_text = input_text.replace("{options_3}", sample['choice'][2])
             
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if torch.sum(inputs['attention_mask']) >=256:

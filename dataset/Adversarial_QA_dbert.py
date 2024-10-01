@@ -5,9 +5,9 @@ from loguru import logger
 import torch
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
-     """Context:{context}\nExtract the answer to the question from the following context.\nQuestion:{Question}\n{options_}""",
+     """Context:{context}\nExtract the answer to the question from the following context.\nQuestion:{Question}""",
 ]
     return prompt[idx]
 
@@ -17,9 +17,13 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """adversarial_qa context:{context}\nadversarial_qa question:{Question}""",
+]
 
 class Adversarial_QA_dbert(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading adversarial_qa dataset")
@@ -30,6 +34,11 @@ class Adversarial_QA_dbert(Dataset):
             
         else:
             self.adversarial_qa = adversarial_qa["validation"].select(range(1000))
+        
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         
         prompt = set_prompt(prompt_idx)
         self.data = []

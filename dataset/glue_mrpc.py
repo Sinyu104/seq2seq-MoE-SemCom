@@ -18,7 +18,7 @@ def get_binary_label(label, idx):
             return "no"
     raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """I want to know whether the following two sentences mean the same thing.\n{{sentence1}}\n{{sentence2}}Do they?\n{options_}""",
     """Does the sentence\n{{sentence1}}\nparaphrase (that is, mean the same thing as) this sentence?\n{{sentence2}}\n{options_}""",
@@ -38,9 +38,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """mrpc sentence1: {{sentence1}}\nmrpc sentence2: {{sentence2}}""",
+]
+    return prompt[idx]
 
 class Glue_mrpc(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading glue/mrpc dataset")
@@ -52,13 +57,17 @@ class Glue_mrpc(Dataset):
         else:
             self.mrpc = mrpc["test"].select(range(1000))
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.mrpc:
             input_text = prompt.replace("{sentence1}", sample['sentence1'])
             input_text = input_text.replace("{sentence2}", sample['sentence2'])
-            input_text = input_text.replace("{options_}", options)
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             self.data.append((inputs, tokenizer(get_binary_label(sample['label'], prompt_idx), return_tensors="pt").input_ids))
             # print("data: ",(inputs, tokenizer(get_binary_label(tree.label), return_tensors="pt").input_ids) )

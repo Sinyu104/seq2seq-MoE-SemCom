@@ -7,7 +7,7 @@ import torch
 
 def set_prompt(idx = 0):
     prompt = [
-     """Context:{context}\nExtract the answer to the question from the following context.\nQuestion:{Question}\n{options_}""",
+     """Context:{context}\nExtract the answer to the question from the following context.\nQuestion:{Question}""",
 ]
     return prompt[idx]
 
@@ -16,6 +16,11 @@ def set_options(idx = 0):
         """OPTIONS:\n-{options_1}\n-{options_2}\n-{options_3}\n-{options_4}""",
     ]
     return options[idx]
+
+def set_prompt(idx = 0):
+    prompt = [
+    """adversarial_qa context:{context}\nadversarial_qa question:{Question}""",
+]
 
 
 class Adversarial_QA_droberta(Dataset):
@@ -31,7 +36,10 @@ class Adversarial_QA_droberta(Dataset):
         else:
             self.adversarial_qa = adversarial_qa["validation"].select(range(1000))
         
-        prompt = set_prompt(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.adversarial_qa:
             input_text = prompt.replace("{context}", sample['context'])

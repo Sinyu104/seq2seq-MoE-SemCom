@@ -14,7 +14,7 @@ def get_binary_label(label):
     else:
         raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """Does the word "{Word}" have the same meaning in these two sentences?\n{Sentence1}\n{Sentence2}\n{options_}""",
 ]
@@ -26,9 +26,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """wic word: {Word} wic sentence 1: {Sentence1}\nwic sentence 2: {Sentence2}""",
+]
+    return prompt[idx]
 
 class WiC(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading WiC dataset")
@@ -42,8 +47,11 @@ class WiC(Dataset):
             gold_path = os.path.join('dataset','WiC_dataset', 'test', 'test.gold.txt')
         
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         with open(dataset_path, 'r') as file:
             self.wic = file.readlines()
@@ -57,7 +65,8 @@ class WiC(Dataset):
             input_text = prompt.replace("{Word}", parts[0])
             input_text = input_text.replace("{Sentence1}", parts[-2])
             input_text = input_text.replace("{Sentence2}", parts[-1])
-            input_text = input_text.replace("{options_}", options)
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             labels = tokenizer(get_binary_label(self.wic_gold[idx]), padding='max_length',truncation=True,max_length=4,return_tensors="pt").input_ids
             if train:

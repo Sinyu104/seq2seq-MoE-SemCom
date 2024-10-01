@@ -202,13 +202,23 @@ class chan_mask_gen(nn.Module):
         # x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
         # x = self.out_conv(x)
         x = torch.cat([x,noise_feature.expand(B,N,-1)], dim=-1)
-        x = self.TokenClassification(inputs_embeds=x).logits
-        # print("logits: ", x)
+        
+        
+        x = self.TokenClassification(inputs_embeds=x, attention_mask=attention_mask).logits
+
         # x = self.act(self.l1(x))
         # x = self.act(self.l2(x))
         x = self.sigmoid(x)
         # print("logits: ", x)
         return x
+    def copy_weights(self):
+        # Copy weights from the original model to the custom model
+       
+        original_model =  T5ForTokenClassification.from_pretrained('google/flan-t5-small', num_labels=1)
+        original_state_dict = original_model.state_dict()
+        for name, param in original_state_dict.items():
+            if name in dict(self.TokenClassification.state_dict()):  # Check if the parameter exists in the custom model
+                dict(self.TokenClassification.state_dict())[name].copy_(param)  # Copy the weights
     
 class info_mask_gen(nn.Module):
     def __init__(self, embed_dim=512):
@@ -358,7 +368,6 @@ class chanFSM(nn.Module):
         self.STE = StraightThroughEstimator()
         
         if self.training:
-            
             curr_m = prob.squeeze(-1)*prev_m
             curr_m = self.STE(curr_m)
             
@@ -730,7 +739,6 @@ class T5Stack(T5PreTrainedModel):
             for layer in v:
                 cuda_device = "cuda:" + str(k)
                 self.block[layer] = self.block[layer].to(cuda_device)
-
         # Set embed_tokens to first layer
         self.embed_tokens = self.embed_tokens.to(self.first_device)
         # Set final layer norm to last device
@@ -887,6 +895,7 @@ class T5Stack(T5PreTrainedModel):
                     layer_head_mask = layer_head_mask.to(hidden_states.device)
                 if cross_attn_layer_head_mask is not None:
                     cross_attn_layer_head_mask = cross_attn_layer_head_mask.to(hidden_states.device)
+                self.FSMs = self.FSMs.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -972,9 +981,13 @@ class T5Stack(T5PreTrainedModel):
                     # print("origianl length: ", torch.mean(compression_rate_group[0].float()))
                 else:
                     # print("In chanFSM")
-                    noise_feature = self.noise_func(noise_std.to(input_ids.device).unsqueeze(1))
+                    # self.noise_func = self.noise_func.to(hidden_states.device)
+                    noise_feature = self.noise_func(noise_std.to(hidden_states.device).unsqueeze(1))
+                    # noise_feature = noise_feature.to(hidden_states.device)
+                    # attention_mask = attention_mask.to(hidden_states.device)
+                    hidden_states = hidden_states.to(noise_feature.device)
+                    attention_mask = attention_mask.to(noise_feature.device)
                     hidden_states, mask_dict_, curr_m = self.FSMs[d](input_ids = input_ids, input_feature=hidden_states, noise_feature=noise_feature, prev_m=attention_mask)
-                    
                     input_shape = hidden_states.size()[:-1]
                     extended_attention_mask = self.get_extended_attention_mask(mask_dict_, input_shape)
                     confidence_rate_group = confidence_rate_group + ( -(curr_m * torch.log(curr_m)).sum(dim=1),)
@@ -1064,10 +1077,10 @@ class T5SC_model(T5PreTrainedModel):
         self.weight_decay = config.weight_decay
         self.distortion = config.distortion
 
-        # self.bit_per_digit = 5
-        # self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
-        #                                 embedding_dim=config.d_model,
-        #                                 quan_bits=self.bit_per_digit)
+        self.bit_per_digit = 5
+        self.codebook = VectorQuantizer(num_embeddings=2**self.bit_per_digit,
+                                        embedding_dim=config.d_model,
+                                        quan_bits=self.bit_per_digit)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1096,7 +1109,9 @@ class T5SC_model(T5PreTrainedModel):
                 getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wi_0.weight.data.copy_(w_0_weight.data)
                 getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wi_1.weight.data.copy_(w_1_weight.data)
                 getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wo.weight.data.copy_(wo_weight.data)
+        self.encoder.FSMs[0].mask_generator.copy_weights()
         for name, module in self.named_modules():
+            
             if ('FSMs' in name) and (not 'TokenClassification' in name) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
             elif 'noise_func' in name and isinstance(module, nn.Linear):
@@ -1107,7 +1122,6 @@ class T5SC_model(T5PreTrainedModel):
                 # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
             elif 'codebook.embedding' in name: 
                 module.weight.data.uniform_(-1 / 2**self.bit_per_digit, 1 / 2**self.bit_per_digit)
-                
             elif ('lora_B' in name) and isinstance(module, nn.Linear):
                 init.uniform_(module.weight, a=-0.01, b=0.01)
             elif 'FSMs' in name and isinstance(module, nn.LayerNorm):
@@ -1132,7 +1146,7 @@ class T5SC_model(T5PreTrainedModel):
         )
         assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
-        # self.codebook.to(self.decoder.first_device)
+        self.codebook.to(self.decoder.first_device)
         self.decoder.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.decoder.first_device)
         self.model_parallel = True
@@ -1250,7 +1264,7 @@ class T5SC_model(T5PreTrainedModel):
         if self.training:
             snr_list = np.arange(2, 26, 4)
             SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
-            SNRdb = torch.FloatTensor([20.0]).to(self.device)
+            # SNRdb = torch.FloatTensor([20.0]).to(self.device)
         else:
             SNRdb = torch.FloatTensor([10.0]).to(self.device)
         # print("Is training? ", self.training, "mode: ", mode, "SNR: ", SNRdb)
@@ -1286,7 +1300,7 @@ class T5SC_model(T5PreTrainedModel):
            
         # power = PowerNormalize(hidden_states, compression_rate)
         # hidden_states = channel_Awgn(hidden_states, power, noise_std, mask_dict)
-        # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
+        hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
         
         
         
@@ -1365,9 +1379,10 @@ class T5SC_model(T5PreTrainedModel):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
-            # codebook_loss = codebook_loss.to(lm_logits.device)
+            codebook_loss = codebook_loss.to(lm_logits.device)
+            compression_rate = compression_rate.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e3*codebook_loss+2*torch.mean(compression_rate)
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':

@@ -13,7 +13,7 @@ def get_binary_label(label):
     else:
         raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """{Context}\nBased on the paragraph about {Title} above can we answer the question that "{question}".?""",
 ]
@@ -25,9 +25,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """quoref context: {Context}\n quoref question:{question}""",
+]
+    return prompt[idx]
 
 class Quoref(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading Quoref dataset")
@@ -40,7 +45,11 @@ class Quoref(Dataset):
             self.quoref = quoref["validation"].select(range(1000))
         
 
-        prompt = set_prompt(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.quoref:
             input_text = prompt.replace("{context}", sample['context'])

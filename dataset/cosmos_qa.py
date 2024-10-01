@@ -18,7 +18,7 @@ def get_binary_label(label, idx):
             return "no"
     raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """ {Passage}\n Based on the passage, {Question}\n {options_}""",
 ]
@@ -30,9 +30,15 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """cosmos_qa passage: {Passage}\n cosmos_qa question: {Question}""",
+]
+    return prompt[idx]
+
 
 class Cosmos(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading allenai/cosmos_qa dataset")
@@ -44,18 +50,22 @@ class Cosmos(Dataset):
         else:
             self.cosmos = cosmos["validation"].select(range(1500))
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.cosmos:
             
             input_text = prompt.replace("{Passage}", sample['context'])
             input_text = input_text.replace("{Question}", sample['question'])
-            input_text = input_text.replace("{options_}", options)
-            input_text = input_text.replace("{options_1}", sample['answer0'])
-            input_text = input_text.replace("{options_2}", sample['answer1'])
-            input_text = input_text.replace("{options_3}", sample['answer2'])
-            input_text = input_text.replace("{options_4}", sample['answer3'])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                input_text = input_text.replace("{options_1}", sample['answer0'])
+                input_text = input_text.replace("{options_2}", sample['answer1'])
+                input_text = input_text.replace("{options_3}", sample['answer2'])
+                input_text = input_text.replace("{options_4}", sample['answer3'])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if torch.sum(inputs['attention_mask']) >=256:
                 continue

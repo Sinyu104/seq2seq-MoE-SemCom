@@ -12,7 +12,7 @@ def get_binary_label(label, endings):
     else:
         raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """What happens next in this paragraph?\n{Passage}\n{options_}""",
 ]
@@ -24,9 +24,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """hellaswag passage: {Passage}\n""",
+]
+    return prompt[idx]
 
 class HellaSwag(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading hellaswag dataset")
@@ -39,16 +44,20 @@ class HellaSwag(Dataset):
             self.hella = hella["validation"].select(range(1000))
         
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.hella:
             input_text = prompt.replace("{Passage}", sample['ctx'])
-            input_text = input_text.replace("{options_}", options)
-            input_text = input_text.replace("{options_1}", sample['endings'][0])
-            input_text = input_text.replace("{options_2}", sample['endings'][1])
-            input_text = input_text.replace("{options_3}", sample['endings'][2])
-            input_text = input_text.replace("{options_4}", sample['endings'][3])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                input_text = input_text.replace("{options_1}", sample['endings'][0])
+                input_text = input_text.replace("{options_2}", sample['endings'][1])
+                input_text = input_text.replace("{options_3}", sample['endings'][2])
+                input_text = input_text.replace("{options_4}", sample['endings'][3])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if torch.sum(inputs['attention_mask']) >=256:
                 continue

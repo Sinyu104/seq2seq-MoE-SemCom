@@ -15,7 +15,7 @@ def get_binary_label(label):
     raise ValueError("Invalid label")
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """Review:\n{sentence}\nIs this review negative or positive?\n{options_}"""
 ]
@@ -25,8 +25,14 @@ def set_options():
     options = """OPTIONS:\n-positive \n-negative """
     return options
 
+def set_prompt(idx = 0):
+    prompt = [
+    """sst2 sentence: {sentence}\n"""
+]
+    return prompt[idx]
+
 class SST(Dataset):
-    def __init__(self, train=True, idx = 0):
+    def __init__(self, train=True, stop_flan=False,idx = 0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading SST dataset")
@@ -37,13 +43,17 @@ class SST(Dataset):
         else:
             self.sst = sst["test"]
         
-        prompt = set_prompt(idx)
-        options = set_options()
+        if not stop_flan:
+            prompt = set_flan_prompt(idx)
+            options = set_options()
+        else:
+            prompt = set_prompt(idx)
         self.data = []
         for tree in self.sst:
             if tree.label != 2:
                 input_text = prompt.replace("{sentence}", tree.to_lines()[0])
-                input_text = input_text.replace("{options_}", options)
+                if not stop_flan:
+                    input_text = input_text.replace("{options_}", options)
                 inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
                 self.data.append((inputs, tokenizer(get_binary_label(tree.label), return_tensors="pt").input_ids))
                 # print("data: ",(inputs, tokenizer(get_binary_label(tree.label), return_tensors="pt").input_ids) )

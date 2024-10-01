@@ -6,7 +6,7 @@ import torch
 
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """{Sentence}\nBased on the sentence provided, determine which option should fill in the blank.\n{options_}""",
 ]
@@ -18,9 +18,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """winogrande sentence: {Sentence}""",
+]
+    return prompt[idx]
 
 class Winogrande(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading winogrande dataset")
@@ -33,14 +38,18 @@ class Winogrande(Dataset):
             self.winog = winog["validation"]
         
         
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.winog:
             input_text = prompt.replace("{Sentence}", sample['sentence'])
-            input_text = input_text.replace("{options_}", options)
-            input_text = input_text.replace("{options_1}", sample['option1'])
-            input_text = input_text.replace("{options_2}", sample['option2'])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                input_text = input_text.replace("{options_1}", sample['option1'])
+                input_text = input_text.replace("{options_2}", sample['option2'])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if torch.sum(inputs['attention_mask']) >=256:
                 continue

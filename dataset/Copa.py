@@ -6,7 +6,7 @@ import torch
 
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """{premise}\nWhat is the "{question}".?\n{options_}""",
 ]
@@ -18,9 +18,15 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """copa premise: {premise}\ncopa question: {question}.?""",
+]
+    return prompt[idx]
+
 
 class Copa(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading copa dataset")
@@ -33,15 +39,19 @@ class Copa(Dataset):
         else:
             self.copa = copa["test"]
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)        
         self.data = []
         for sample in self.copa:
             input_text = prompt.replace("{premise}", sample['premise'])
             input_text = input_text.replace("{question}", sample['question'])
-            input_text = input_text.replace("{options_}", options)
-            input_text = input_text.replace("{Choise1}", sample['choice1'])
-            input_text = input_text.replace("{Choise2}", sample['choice2'])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                input_text = input_text.replace("{Choise1}", sample['choice1'])
+                input_text = input_text.replace("{Choise2}", sample['choice2'])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if sample['label']==0:
                 labels = tokenizer(sample['choice1'], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids

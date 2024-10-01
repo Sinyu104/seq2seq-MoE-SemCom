@@ -104,61 +104,61 @@ def build_dataset(is_train, args):
                     print("Building dataset for {} task...".format(task))
                     match task:
                         case 'sen':
-                            self.dataset_list[task] = SST(train=is_train)
+                            self.dataset_list[task] = SST(stop_flan=args.stop_flan, train=is_train)
                         case 'trans':
-                            self.dataset_list[task] = IWSLT(train=is_train)
+                            self.dataset_list[task] = IWSLT(stop_flan=args.stop_flan,train=is_train)
                         case 'qa':
-                            self.dataset_list[task] = SQuAD(train=is_train)
+                            self.dataset_list[task] = SQuAD(stop_flan=args.stop_flan,train=is_train)
                         case 'mmlu':
-                            self.dataset_list[task] = MMLU(train=is_train)
+                            self.dataset_list[task] = MMLU(stop_flan=args.stop_flan,train=is_train)
                         case 'glue_mrpc':
-                            self.dataset_list[task] = Glue_mrpc(train=is_train)
+                            self.dataset_list[task] = Glue_mrpc(stop_flan=args.stop_flan,train=is_train)
                         case 'glue_qqp':
-                            self.dataset_list[task] = Glue_qqp(train=is_train)
+                            self.dataset_list[task] = Glue_qqp(stop_flan=args.stop_flan,train=is_train)
                         case 'labeled_final':
-                            self.dataset_list[task] = labeled_final(train=is_train)
+                            self.dataset_list[task] = labeled_final(stop_flan=args.stop_flan,train=is_train)
                         case 'anli':
-                            self.dataset_list[task] = Anli(train=is_train)
+                            self.dataset_list[task] = Anli(stop_flan=args.stop_flan,train=is_train)
                         case 'mnli':
-                            self.dataset_list[task] = Mnli(train=is_train)
+                            self.dataset_list[task] = Mnli(stop_flan=args.stop_flan,train=is_train)
                         case 'qnli':
-                            self.dataset_list[task] = Qnli(train=is_train)
+                            self.dataset_list[task] = Qnli(stop_flan=args.stop_flan,train=is_train)
                         case 'boolq':
-                            self.dataset_list[task] = BoolQ(train=is_train)
+                            self.dataset_list[task] = BoolQ(stop_flan=args.stop_flan,train=is_train)
                         case 'copa':
-                            self.dataset_list[task] = Copa(train=is_train)
+                            self.dataset_list[task] = Copa(stop_flan=args.stop_flan,train=is_train)
                         case 'arc_easy':
-                            self.dataset_list[task] = ARC_easy(train=is_train)
+                            self.dataset_list[task] = ARC_easy(stop_flan=args.stop_flan,train=is_train)
                         case 'hella':
-                            self.dataset_list[task] = HellaSwag(train=is_train)
+                            self.dataset_list[task] = HellaSwag(stop_flan=args.stop_flan,train=is_train)
                         case 'winog':
-                            self.dataset_list[task] = Winogrande(train=is_train)
+                            self.dataset_list[task] = Winogrande(stop_flan=args.stop_flan,train=is_train)
                         case 'cosmos':
-                            self.dataset_list[task] = Cosmos(train=is_train)
+                            self.dataset_list[task] = Cosmos(stop_flan=args.stop_flan,train=is_train)
                         case 'agnews':
-                            self.dataset_list[task] = Ag_news(train=is_train)
+                            self.dataset_list[task] = Ag_news(stop_flan=args.stop_flan,train=is_train)
                         case 'commonsense_qa':
-                            self.dataset_list[task] = Commonsense_QA(train=is_train)
+                            self.dataset_list[task] = Commonsense_QA(stop_flan=args.stop_flan,train=is_train)
                         case 'dream':
-                            self.dataset_list[task] = Dream(train=is_train)
+                            self.dataset_list[task] = Dream(stop_flan=args.stop_flan,train=is_train)
                         case 'adversarial_qa_dbert':
-                            self.dataset_list[task] = Adversarial_QA_dbert(train=is_train)
+                            self.dataset_list[task] = Adversarial_QA_dbert(stop_flan=args.stop_flan,train=is_train)
                         case 'adversarial_qa_dbidaf':
-                            self.dataset_list[task] = Adversarial_QA_dbidaf(train=is_train)
+                            self.dataset_list[task] = Adversarial_QA_dbidaf(stop_flan=args.stop_flan,train=is_train)
                         case 'adversarial_qa_droberta':
-                            self.dataset_list[task] = Adversarial_QA_droberta(train=is_train)
+                            self.dataset_list[task] = Adversarial_QA_droberta(stop_flan=args.stop_flan,train=is_train)
                         case 'gigaword':
-                            self.dataset_list[task] = Gigaword(train=is_train)
+                            self.dataset_list[task] = Gigaword(stop_flan=args.stop_flan,train=is_train)
                         case 'wic':
-                            self.dataset_list[task] = WiC(train=is_train)
+                            self.dataset_list[task] = WiC(stop_flan=args.stop_flan,train=is_train)
                         case 'common_gen':
-                            self.dataset_list[task] = Common_gen(train=is_train)
+                            self.dataset_list[task] = Common_gen(stop_flan=args.stop_flan,train=is_train)
                         case 'quartz':
-                            self.dataset_list[task] = Quartz(train=is_train)
+                            self.dataset_list[task] = Quartz(stop_flan=args.stop_flan,train=is_train)
                         case 'social_i_qa':
-                            self.dataset_list[task] = Social_IQA(train=is_train)
+                            self.dataset_list[task] = Social_IQA(stop_flan=args.stop_flan,train=is_train)
                         case 'quoref':
-                            self.dataset_list[task] = Quoref(train=is_train)
+                            self.dataset_list[task] = Quoref(stop_flan=args.stop_flan,train=is_train)
                     
 
                 self.length = [('-', 0)]
@@ -189,61 +189,61 @@ def build_dataset(is_train, args):
         for task in args.test_task:
             match task:
                 case 'sen':
-                    SeperatedDataset[task]=SST(train=is_train)
+                    SeperatedDataset[task]=SST(stop_flan=args.stop_flan,train=is_train)
                 case 'trans':
-                    SeperatedDataset[task]=IWSLT(train=is_train)
+                    SeperatedDataset[task]=IWSLT(stop_flan=args.stop_flan,train=is_train)
                 case 'qa':
-                    SeperatedDataset[task]=SQuAD(train=is_train)
+                    SeperatedDataset[task]=SQuAD(stop_flan=args.stop_flan,train=is_train)
                 case 'mmlu':
-                    SeperatedDataset[task]=MMLU(train=is_train)
+                    SeperatedDataset[task]=MMLU(stop_flan=args.stop_flan,train=is_train)
                 case 'glue_mrpc':
-                    SeperatedDataset[task]=Glue_mrpc(train=is_train)
+                    SeperatedDataset[task]=Glue_mrpc(stop_flan=args.stop_flan,train=is_train)
                 case 'glue_qqp':
-                    SeperatedDataset[task]=Glue_qqp(train=is_train)
+                    SeperatedDataset[task]=Glue_qqp(stop_flan=args.stop_flan,train=is_train)
                 case 'labeled_final':
-                    SeperatedDataset[task]=labeled_final(train=is_train)
+                    SeperatedDataset[task]=labeled_final(stop_flan=args.stop_flan,train=is_train)
                 case 'anli':
-                    SeperatedDataset[task]=Anli(train=is_train)
+                    SeperatedDataset[task]=Anli(stop_flan=args.stop_flan,train=is_train)
                 case 'mnli':
-                    SeperatedDataset[task]=Anli(train=is_train)
+                    SeperatedDataset[task]=Anli(stop_flan=args.stop_flan,train=is_train)
                 case 'qnli':
-                    SeperatedDataset[task]=Qnli(train=is_train)
+                    SeperatedDataset[task]=Qnli(stop_flan=args.stop_flan,train=is_train)
                 case 'boolq':
-                    SeperatedDataset[task]=BoolQ(train=is_train)
+                    SeperatedDataset[task]=BoolQ(stop_flan=args.stop_flan,train=is_train)
                 case 'copa':
-                    SeperatedDataset[task]=Copa(train=is_train)
+                    SeperatedDataset[task]=Copa(stop_flan=args.stop_flan,train=is_train)
                 case 'arc_easy':
-                    SeperatedDataset[task]=ARC_easy(train=is_train)
+                    SeperatedDataset[task]=ARC_easy(stop_flan=args.stop_flan,train=is_train)
                 case 'hella':
-                    SeperatedDataset[task]=HellaSwag(train=is_train)
+                    SeperatedDataset[task]=HellaSwag(stop_flan=args.stop_flan,train=is_train)
                 case 'winog':
-                    SeperatedDataset[task]=Winogrande(train=is_train)
+                    SeperatedDataset[task]=Winogrande(stop_flan=args.stop_flan,train=is_train)
                 case 'cosmos':
-                    SeperatedDataset[task]=Cosmos(train=is_train)
+                    SeperatedDataset[task]=Cosmos(stop_flan=args.stop_flan,train=is_train)
                 case 'agnews':
-                    SeperatedDataset[task]=Ag_news(train=is_train)
+                    SeperatedDataset[task]=Ag_news(stop_flan=args.stop_flan,train=is_train)
                 case 'commonsense_qa':
-                    SeperatedDataset[task]=Commonsense_QA(train=is_train)
+                    SeperatedDataset[task]=Commonsense_QA(stop_flan=args.stop_flan,train=is_train)
                 case 'dream':
-                    SeperatedDataset[task]=Dream(train=is_train)
+                    SeperatedDataset[task]=Dream(stop_flan=args.stop_flan,train=is_train)
                 case 'adversarial_qa_dbert':
-                    SeperatedDataset[task]=Adversarial_QA_dbert(train=is_train)
+                    SeperatedDataset[task]=Adversarial_QA_dbert(stop_flan=args.stop_flan,train=is_train)
                 case 'adversarial_qa_dbidaf':
-                    SeperatedDataset[task]=Adversarial_QA_dbidaf(train=is_train)
+                    SeperatedDataset[task]=Adversarial_QA_dbidaf(stop_flan=args.stop_flan,train=is_train)
                 case 'adversarial_qa_droberta':
-                    SeperatedDataset[task]=Adversarial_QA_droberta(train=is_train)
+                    SeperatedDataset[task]=Adversarial_QA_droberta(stop_flan=args.stop_flan,train=is_train)
                 case 'gigaword':
-                    SeperatedDataset[task]=Gigaword(train=is_train)
+                    SeperatedDataset[task]=Gigaword(stop_flan=args.stop_flan,train=is_train)
                 case 'wic':
-                    SeperatedDataset[task]=WiC(train=is_train)
+                    SeperatedDataset[task]=WiC(stop_flan=args.stop_flan,train=is_train)
                 case 'common_gen':
-                    SeperatedDataset[task]=Common_gen(train=is_train)
+                    SeperatedDataset[task]=Common_gen(stop_flan=args.stop_flan,train=is_train)
                 case 'quartz':
-                    SeperatedDataset[task]=Common_gen(train=is_train)
+                    SeperatedDataset[task]=Common_gen(stop_flan=args.stop_flan,train=is_train)
                 case 'social_i_qa':
-                    SeperatedDataset[task]=Social_IQA(train=is_train)
+                    SeperatedDataset[task]=Social_IQA(stop_flan=args.stop_flan,train=is_train)
                 case 'quoref':
-                    SeperatedDataset[task]=Quoref(train=is_train)
+                    SeperatedDataset[task]=Quoref(stop_flan=args.stop_flan,train=is_train)
 
         return SeperatedDataset
 

@@ -11,10 +11,10 @@ import time
 import datetime
 import random
 from config import T5SC_config
-torch.set_printoptions(threshold=10_000)
+# torch.set_printoptions(threshold=10_000)
 from peft import LoraConfig, get_peft_model, TaskType
 from dataset.MMLU import subcategories
-
+from transformers import  BertConfig, BertModel, T5EncoderModel, BertGenerationEncoder, ViTModel, T5Model, T5ForTokenClassification, T5PreTrainedModel
 
 
 
@@ -28,9 +28,8 @@ def seed_inital(seed=0):
 
 
 def main(args):
-    #### Get the Model
+    #### Get the Model 
     seed_inital(seed=args.seed)
-    init_distributed_mode(args)
     device=torch.device(args.device)
     config=T5SC_config()
     model = get_model(args, config=config)
@@ -57,10 +56,6 @@ def main(args):
     
 
     # model.to(device)
-    model_without_ddp = model
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model_without_ddp = model.module  
     
 
     #### Get the data and dataloader
@@ -110,7 +105,7 @@ def main(args):
     for epoch in range(args.epochs):
         train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, device=device, mode='info')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
-        if (epoch+1)%3==0:
+        if (epoch+1)%1==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)
             save_model(args=args, dir=args.output_dir, model=model, config=config, train_stats=train_stats, test_stats=test_stats)
             # print("On average: ")

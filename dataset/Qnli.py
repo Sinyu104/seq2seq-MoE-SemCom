@@ -13,7 +13,7 @@ def get_binary_label(label):
     else:
         raise ValueError("Invalid label")
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """{Premise}\nBased on the paragraph above can we answer that "{hypothesis}".?\n{options_}""",
 ]
@@ -25,9 +25,14 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """qnli premise: {Premise}\n "qnli hypothesis: {hypothesis}""",
+]
+    return prompt[idx]
 
 class Qnli(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading QNLI")
         qnli = load_dataset("nyu-mll/glue", "qnli")
@@ -39,13 +44,17 @@ class Qnli(Dataset):
             self.qnli = qnli["validation"].select(range(1000))
         
 
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.qnli:
             input_text = prompt.replace("{Premise}", sample['sentence'])
             input_text = input_text.replace("{hypothesis}", sample['question'])
-            input_text = input_text.replace("{options_}", options)
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             labels = tokenizer(get_binary_label(sample['label']), padding='max_length',truncation=True,max_length=16,return_tensors="pt").input_ids
             if train:

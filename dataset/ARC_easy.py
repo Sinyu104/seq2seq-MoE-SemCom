@@ -6,7 +6,7 @@ import torch
 
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
     """{Questions}\n{options_}""",
 ]
@@ -18,9 +18,15 @@ def set_options(idx = 0):
     ]
     return options[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+    """arc_easy questions:{Questions}\n""",
+]
+    return prompt[idx]
+
 
 class ARC_easy(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading arc dataset")
@@ -33,18 +39,22 @@ class ARC_easy(Dataset):
         else:
             self.arc = arc["test"].select(range(1000))
             
-        prompt = set_prompt(prompt_idx)
-        options = set_options(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.arc:
             input_text = prompt.replace("{Questions}", sample['question'])
-            input_text = input_text.replace("{options_}", options)
-            if not len(sample['choices']['text'])==4:
-                continue
-            input_text = input_text.replace("{Choise1}", sample['choices']['text'][0])
-            input_text = input_text.replace("{Choise2}", sample['choices']['text'][1])
-            input_text = input_text.replace("{Choise3}", sample['choices']['text'][2])
-            input_text = input_text.replace("{Choise4}", sample['choices']['text'][3])
+            if not stop_flan:
+                input_text = input_text.replace("{options_}", options)
+                if not len(sample['choices']['text'])==4:
+                    continue
+                input_text = input_text.replace("{Choise1}", sample['choices']['text'][0])
+                input_text = input_text.replace("{Choise2}", sample['choices']['text'][1])
+                input_text = input_text.replace("{Choise3}", sample['choices']['text'][2])
+                input_text = input_text.replace("{Choise4}", sample['choices']['text'][3])
             inputs = tokenizer(input_text, padding='max_length', truncation=True,max_length=256, return_tensors="pt")
             if sample['answerKey']=='A' or sample['answerKey']=='1':
                 labels = tokenizer(sample['choices']['text'][0], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids

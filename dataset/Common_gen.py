@@ -5,15 +5,20 @@ from loguru import logger
 import torch
 
 
-def set_prompt(idx = 0):
+def set_flan_prompt(idx = 0):
     prompt = [
      """Generate a sentence with all the concepts:{Concepts}\n""",
 ]
     return prompt[idx]
 
+def set_prompt(idx = 0):
+    prompt = [
+     """common_gen concepts:{Concepts}\n""",
+]
+    return prompt[idx]
 
 class Common_gen(Dataset):
-    def __init__(self, train=True, prompt_idx=0):
+    def __init__(self, train=True, stop_flan=False, prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading common_gen dataset")
@@ -25,7 +30,10 @@ class Common_gen(Dataset):
         else:
             self.common_gen = common_gen["validation"]
         
-        prompt = set_prompt(prompt_idx)
+        if not stop_flan:
+            prompt = set_flan_prompt(prompt_idx)
+        else:
+            prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.common_gen:
             concepts = ' '.join(sample['concepts'])
