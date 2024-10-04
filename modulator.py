@@ -96,7 +96,7 @@ def qam_demapper(syms, demap_table):
 def PowerNormalize(x, mask):
     B, N, C = x.shape
     x_square = torch.mul(x, x)
-    power = (torch.sum(x_square, dim=(1, 2))/mask/C).sqrt()
+    power = (torch.sum(x_square, dim=(1, 2))/mask/C)
     power = power.view(-1, 1, 1)
     # x = torch.div(x, power)
     
@@ -115,6 +115,8 @@ def channel_Awgn(tx_signal, power, n_var, mask):
         -------
         bits: array(num_bit, ). Demodulated bits.
     """
+    
+    power = power+1e-3
     Rx_sig = tx_signal + power.sqrt()*torch.normal(0, n_var.item(), size=tx_signal.shape).to(tx_signal.device) * mask.unsqueeze(-1).expand(-1, -1, tx_signal.shape[-1])
     return Rx_sig
     # signal_power = np.mean(abs(tx_signal ** 2))

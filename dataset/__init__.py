@@ -11,6 +11,7 @@ from .Qnli import Qnli
 from .BoolQ import BoolQ
 from .Copa import Copa
 from .ARC_easy import ARC_easy
+from .ARC_challage import ARC_challage
 from .hellaswag import HellaSwag
 from .winogrande import Winogrande
 from .cosmos_qa import Cosmos

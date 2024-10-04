@@ -129,6 +129,8 @@ def build_dataset(is_train, args):
                             self.dataset_list[task] = Copa(stop_flan=args.stop_flan,train=is_train)
                         case 'arc_easy':
                             self.dataset_list[task] = ARC_easy(stop_flan=args.stop_flan,train=is_train)
+                        case 'arc_challage':
+                            self.dataset_list[task] = ARC_challage(stop_flan=args.stop_flan,train=is_train)
                         case 'hella':
                             self.dataset_list[task] = HellaSwag(stop_flan=args.stop_flan,train=is_train)
                         case 'winog':
@@ -214,6 +216,8 @@ def build_dataset(is_train, args):
                     SeperatedDataset[task]=Copa(stop_flan=args.stop_flan,train=is_train)
                 case 'arc_easy':
                     SeperatedDataset[task]=ARC_easy(stop_flan=args.stop_flan,train=is_train)
+                case 'arc_challage':
+                    SeperatedDataset[task]=ARC_challage(stop_flan=args.stop_flan,train=is_train)
                 case 'hella':
                     SeperatedDataset[task]=HellaSwag(stop_flan=args.stop_flan,train=is_train)
                 case 'winog':
@@ -276,6 +280,8 @@ def task_metrics_mapping(args):
             metrics['copa'] = load("exact_match")
         elif task.lower() == 'arc_easy':
             metrics['arc_easy'] = load("exact_match")
+        elif task.lower() == 'arc_challage':
+            metrics['arc_challage'] = load("exact_match")
         elif task.lower() == 'hella':
             metrics['hella'] = load("exact_match")
         elif task.lower() == 'winog':

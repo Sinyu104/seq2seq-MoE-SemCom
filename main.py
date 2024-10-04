@@ -14,7 +14,6 @@ from config import T5SC_config
 # torch.set_printoptions(threshold=10_000)
 from peft import LoraConfig, get_peft_model, TaskType
 from dataset.MMLU import subcategories
-from transformers import  BertConfig, BertModel, T5EncoderModel, BertGenerationEncoder, ViTModel, T5Model, T5ForTokenClassification, T5PreTrainedModel
 
 
 
@@ -33,7 +32,6 @@ def main(args):
     device=torch.device(args.device)
     config=T5SC_config()
     model = get_model(args, config=config)
-    
     # Define LoRA Config
     # lora_config = LoraConfig(
     #     r=4,

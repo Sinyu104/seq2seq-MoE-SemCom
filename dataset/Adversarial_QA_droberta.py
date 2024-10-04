@@ -20,7 +20,11 @@ def set_options(idx = 0):
 def set_prompt(idx = 0):
     prompt = [
     """adversarial_qa context:{context}\nadversarial_qa question:{Question}""",
+<<<<<<< HEAD
 ]   
+=======
+]
+>>>>>>> origin
     return prompt[idx]
 
 
