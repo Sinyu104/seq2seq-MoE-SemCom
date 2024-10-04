@@ -25,12 +25,12 @@ def set_prompt(idx = 0):
     return prompt[idx]
 
 
-class ARC_easy(Dataset):
+class ARC_challage(Dataset):
     def __init__(self, train=True, stop_flan=False,prompt_idx=0):
         logger.info("Loading the tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
         logger.info("Loading arc dataset")
-        arc = load_dataset("allenai/ai2_arc", "ARC-Easy")
+        arc = load_dataset("allenai/ai2_arc", "ARC-Challenge")
 
 
         if train:
@@ -65,7 +65,7 @@ class ARC_easy(Dataset):
             elif sample['answerKey']=='D'or sample['answerKey']=='4':
                 labels = tokenizer(sample['choices']['text'][3], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids
             else:
-                continue
+                raise ValueError("Invalid label")
             if train:
                 labels[labels == tokenizer.pad_token_id] = -100
             self.data.append((inputs, labels))

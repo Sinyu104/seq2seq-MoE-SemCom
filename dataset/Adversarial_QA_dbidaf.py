@@ -21,6 +21,7 @@ def set_prompt(idx = 0):
     prompt = [
     """adversarial_qa context:{context}\nadversarial_qa question:{Question}""",
 ]
+    return prompt[idx]
 
 
 class Adversarial_QA_dbidaf(Dataset):
