@@ -21,7 +21,7 @@ def evaluate(args, model, testloader, device, print_freq=100):
     total = {task: 0 for task in args.test_task}
     final = {'loss': {task: 0 for task in args.test_task}, 'score': {task: 0 for task in args.test_task}, 'compression rate':{task: 0 for task in args.test_task}}
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-    model.eval()
+    # model.eval()
     for task in args.test_task:
         if task.lower() == 'mmlu':
             subjects = list(subcategories.keys())

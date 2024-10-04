@@ -104,6 +104,7 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     for epoch in range(args.epochs):
         train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, device=device, mode='info')
+        save_model(args=args, dir=args.output_dir, model=model, config=config, train_stats=train_stats)
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
         if (epoch+1)%1==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)

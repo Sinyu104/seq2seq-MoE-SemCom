@@ -38,6 +38,7 @@ class Commonsense_QA(Dataset):
         
         if not stop_flan:
             prompt = set_flan_prompt(prompt_idx)
+            options = set_options(prompt_idx)
         else:
             prompt = set_prompt(prompt_idx)
         self.data = []

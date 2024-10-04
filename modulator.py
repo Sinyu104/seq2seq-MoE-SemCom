@@ -3,6 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.ndimage.filters import gaussian_filter1d
 import torch
+from loguru import logger
 
 def qam_mod(M):
     """
@@ -101,7 +102,7 @@ def PowerNormalize(x, mask):
     
     return power
 
-def channel_Awgn(tx_signal, snr, mask):
+def channel_Awgn(tx_signal, power, n_var, mask):
     """
         AWGN channel model.
 
@@ -114,14 +115,14 @@ def channel_Awgn(tx_signal, snr, mask):
         -------
         bits: array(num_bit, ). Demodulated bits.
     """
-    # Rx_sig = Tx_sig + power.sqrt()*torch.normal(0, n_var.item(), size=Tx_sig.shape).to(Tx_sig.device) * mask.unsqueeze(-1).expand(-1, -1, Tx_sig.shape[-1])
-    # return Rx_sig
-    signal_power = np.mean(abs(tx_signal ** 2))
-    # print(signal_power)
-    n_var = signal_power * 10 ** (- snr / 10)
-    # Generate complex noise
-    noise = math.sqrt(n_var/2) * (np.random.randn(*tx_signal.shape)+1j*np.random.randn(*tx_signal.shape))*mask
-    return tx_signal + noise
+    Rx_sig = tx_signal + power.sqrt()*torch.normal(0, n_var.item(), size=tx_signal.shape).to(tx_signal.device) * mask.unsqueeze(-1).expand(-1, -1, tx_signal.shape[-1])
+    return Rx_sig
+    # signal_power = np.mean(abs(tx_signal ** 2))
+    # # print(signal_power)
+    # n_var = signal_power * 10 ** (- snr / 10)
+    # # Generate complex noise
+    # noise = math.sqrt(n_var/2) * (np.random.randn(*tx_signal.shape)+1j*np.random.randn(*tx_signal.shape))*mask
+    # return tx_signal + noise
 
 
 def channel_Rayleigh(tx_signal, snr, output_power=False):

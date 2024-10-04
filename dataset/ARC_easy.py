@@ -65,7 +65,7 @@ class ARC_easy(Dataset):
             elif sample['answerKey']=='D'or sample['answerKey']=='4':
                 labels = tokenizer(sample['choices']['text'][3], padding='max_length',truncation=True,max_length=32,return_tensors="pt").input_ids
             else:
-                raise ValueError("Invalid label")
+                continue
             if train:
                 labels[labels == tokenizer.pad_token_id] = -100
             self.data.append((inputs, labels))
