@@ -41,7 +41,6 @@ class Adversarial_QA_dbert(Dataset):
         else:
             prompt = set_prompt(prompt_idx)
         
-        prompt = set_prompt(prompt_idx)
         self.data = []
         for sample in self.adversarial_qa:
             input_text = prompt.replace("{context}", sample['context'])

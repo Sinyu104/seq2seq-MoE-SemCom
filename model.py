@@ -405,7 +405,7 @@ class infoFSM(nn.Module):
             # return input_feature, new_tensor, curr_m
 
 class chanFSM(nn.Module):
-    def __init__(self, mask_num=11, embed_dim=512):
+    def __init__(self, mask_num=11, embed_dim=768):
         super().__init__()
         # self.tokenizer_flan = AutoTokenizer.from_pretrained("google/flan-t5-small")
         # self.tokenizer_bert = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -1180,7 +1180,7 @@ class T5SC_model(T5PreTrainedModel):
                 nn.init.zeros_(module.bias)
             # elif ('gate' in name ) and isinstance(module, nn.Linear):
             #     nn.init.xavier_uniform_(module.weight)
-                # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
+            #     # init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
             elif 'codebook.embedding' in name: 
                 module.weight.data.uniform_(-1 / 2**self.bit_per_digit, 1 / 2**self.bit_per_digit)
             elif ('lora_B' in name) and isinstance(module, nn.Linear):
@@ -1359,13 +1359,9 @@ class T5SC_model(T5PreTrainedModel):
         compression_rate = encoder_outputs.compression_rates
         confidence_rate = encoder_outputs.confidence_rate
         mask_dict = encoder_outputs.mask_dict[-1]
-        transmitted_num = encoder_outputs.transmitted_num 
-        # print("transmitted_num: ", transmitted_num)
-        # print("compression_rate: ", compression_rate)
+        
         compression_rate = compression_rate.to(hidden_states.device)
-        transmitted_num = transmitted_num.to(hidden_states.device)
-        power = PowerNormalize(hidden_states, transmitted_num).to(hidden_states.device)
-        # print("power: ", power)
+        power = PowerNormalize(hidden_states, compression_rate).to(hidden_states.device)
         mask_dict = mask_dict.to(hidden_states.device)
         hidden_states = channel_Awgn(hidden_states, power, noise_std, mask_dict)
         # hidden_states, codebook_loss = self.codebook(hidden_states, SNRdb, mask_dict)
