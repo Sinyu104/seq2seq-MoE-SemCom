@@ -45,7 +45,8 @@ def count_parameters(model):
 
 def load_ckpt(args, model, config=None):
     print(f"Load checkpoint: {args.resume}")
-    saved_model_data = torch.load(args.resume)
+    # , map_location = {"cuda:0":"cuda:0", "cuda:1":"cuda:1","cuda:2":"cuda:1","cuda:3":"cuda:1",}
+    saved_model_data = torch.load(args.resume, map_location = {"cuda:0":"cuda:0", "cuda:1":"cuda:1","cuda:2":"cuda:1","cuda:3":"cuda:1",})
     config = config if config is not None else (saved_model_data['config'] if 'config' in saved_model_data else AutoConfig.from_pretrained("google/flan-t5-small"))
     # args = saved_model_data['args'] if 'config' in saved_model_data else args
     # new_state_dict = {}

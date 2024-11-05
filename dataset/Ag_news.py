@@ -33,6 +33,7 @@ def set_prompt(idx = 0):
     prompt = [
     """ag_news passage:{Passage}""",
 ]
+    return prompt[idx]
 
 
 class Ag_news(Dataset):

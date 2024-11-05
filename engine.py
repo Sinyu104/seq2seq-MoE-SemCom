@@ -21,7 +21,7 @@ def evaluate(args, model, testloader, device, print_freq=100):
     total = {task: 0 for task in args.test_task}
     final = {'loss': {task: 0 for task in args.test_task}, 'score': {task: 0 for task in args.test_task}, 'compression rate':{task: 0 for task in args.test_task}}
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
-    # model.eval()
+    model.eval()
     for task in args.test_task:
         if task.lower() == 'mmlu':
             subjects = list(subcategories.keys())
@@ -121,7 +121,7 @@ def evaluate(args, model, testloader, device, print_freq=100):
     return final
 
 
-def train(args, model, dataloader, optimizer, device, mode, print_freq=100, accumulation_steps=1):
+def train(args, model, dataloader, optimizer, device, mode, print_freq=10, accumulation_steps=1):
     total_loss = 0.0
     cr = {task: 0 for task in args.train_task}
     task_batch = {task: 0 for task in args.train_task}
@@ -139,7 +139,6 @@ def train(args, model, dataloader, optimizer, device, mode, print_freq=100, accu
         with autocast(enabled=False):
             outputs = model(input_ids=texts, attention_mask=masks, labels=targets, mode=mode, task=task)
             loss = outputs.loss
-        
         
         compression_rate = outputs.compression_rate
         cr[task]+=compression_rate.item()
@@ -166,4 +165,4 @@ def train(args, model, dataloader, optimizer, device, mode, print_freq=100, accu
     return {
         'loss':avg_train_loss, 
         'compression_rate': avg_cr
-    }
+    }, model

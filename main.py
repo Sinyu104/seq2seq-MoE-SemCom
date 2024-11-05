@@ -49,7 +49,7 @@ def main(args):
     logger.info(f"Trainable parameters: {param_train/1e6}M ({param_percent}%).")
     if args.resume:
         model, config, args = load_ckpt(args, model, config)
-    model.initial_weights(config)
+    # model.initial_weights(config)
 
     
 
@@ -101,7 +101,7 @@ def main(args):
     optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr = 1e-5) 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     for epoch in range(args.epochs):
-        train_stats = train(args=args, model=model, dataloader=trainloader, optimizer=optimizer, device=device, mode='info')
+        train_stats, model = train(args=args, model=model, dataloader=batches, optimizer=optimizer, device=device, mode='info')
         print(f"Epoch {epoch+1}/{args.epochs}, Average Training Loss: {train_stats['loss']}, Compression rates: {train_stats['compression_rate']}")
         if (epoch+1)%1==0:
             test_stats = evaluate(args = args, model = model, testloader = testloader, device = device)

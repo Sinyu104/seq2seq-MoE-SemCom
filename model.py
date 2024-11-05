@@ -159,10 +159,7 @@ class StraightThroughEstimator(nn.Module):
         x = STEFunction.apply(x)
         return x
 
-
-
-
-class chan_mask_gen(nn.Module):
+class mask_gen(nn.Module):
     def __init__(self, embed_dim=512):
         super().__init__()
         # self.in_conv = nn.Sequential(
@@ -179,19 +176,52 @@ class chan_mask_gen(nn.Module):
         #     nn.Linear(embed_dim // 4, 2),
         #     nn.LogSoftmax(dim=-1)
         # )
-        self.TokenClassification = T5ForTokenClassification.from_pretrained('google/flan-t5-base', num_labels=1)
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.L = nn.Linear(embed_dim, embed_dim//2)
+        # self.TokenClassification = T5ForTokenClassification.from_pretrained('google/flan-t5-base', num_labels=1)
+        
         self.l1 = nn.Linear(embed_dim , embed_dim // 2)
         self.l2 = nn.Linear(embed_dim // 2, embed_dim // 4)
         self.l3 = nn.Linear(embed_dim // 4, 1)
         self.act = nn.GELU()
         self.sigmoid = nn.Sigmoid()
+    def forward(self, x):   
         
-    
+        x = self.act(self.l1(x))
+        x = self.act(self.l2(x))
+        x = self.sigmoid(self.l3(x))
+        # x = self.sigmoid(x)
+        return x
 
 
-    def forward(self, x, noise_feature, attention_mask):   
+class chan_mask_gen(nn.Module):
+    def __init__(self, num_token=256, embed_dim=512, num_mask=10):
+        super().__init__()
+        # self.in_conv = nn.Sequential(
+        #     nn.LayerNorm(embed_dim),
+        #     nn.Linear(embed_dim, embed_dim),
+        #     nn.GELU()
+        # )
+        
+        # self.out_conv = nn.Sequential(
+        #     nn.Linear(embed_dim, embed_dim // 2),
+        #     nn.GELU(),
+        #     nn.Linear(embed_dim // 2, embed_dim // 4),
+        #     nn.GELU(),
+        #     nn.Linear(embed_dim // 4, 2),
+        #     nn.LogSoftmax(dim=-1)
+        # )
+        # self.TokenClassification = T5ForTokenClassification.from_pretrained('google/flan-t5-base', num_labels=1)
+        self.num_token = num_token
+        self.num_mask = num_mask
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.L = nn.Linear(embed_dim, embed_dim//2)
+        self.l = nn.Linear(embed_dim, 1)
+        self.act = nn.GELU()
+        self.router = nn.Linear(num_token, num_mask)
+        self.mask_gen = nn.ModuleDict()
+        for idx in range(num_mask):
+            self.mask_gen[f"mask_{idx}"] = mask_gen(embed_dim)
+        
+    def forward(self, x, noise_feature, attention_mask, k=1):   
         # bert_outputs = self.bert(input_ids=x, attention_mask=attention_mask)
         # bert_embedding = bert_outputs.last_hidden_state
         x = self.act(self.L(self.norm1(x)))
@@ -203,18 +233,41 @@ class chan_mask_gen(nn.Module):
         # x = torch.cat([local_x, global_x.expand(B, N, C//2), noise_feature.expand(B,N,C//2)], dim=-1)
         # x = self.out_conv(x)
         x = torch.cat([x,noise_feature.expand(B,N,-1)], dim=-1)
-        x = self.TokenClassification(inputs_embeds=x, attention_mask=attention_mask).logits
-            
-        # x = self.act(self.l1(x))
-        # x = self.act(self.l2(x))
-        # x = self.sigmoid(self.l3(x))
-        x = self.sigmoid(x)
-        # print("logits: ", x)
+        x_ = self.l(x).squeeze(-1)
+        
+        router_values = self.router(x_)
+        
+        
+        # Get top-2 experts
+        router_probabilities , top_k_indices = torch.topk(router_values, k, dim=-1)
+        router_probabilities = F.softmax(router_probabilities, dim=-1)
+        router_probabilities=router_probabilities.unsqueeze(2).expand(-1, self.num_token, -1)
+        top_k_indices=top_k_indices.unsqueeze(2).expand(-1, self.num_token, -1)
+        
+
+        next_states = x[:, :, 0].unsqueeze(-1).clone()
+        batch_size, seq_len = x_.shape[0], x_.shape[1]
+        mask = torch.zeros((batch_size, seq_len, self.num_mask), dtype=torch.bool, device = top_k_indices.device)
+        for i in range(k):
+            mask.scatter_(2, top_k_indices[..., i:i+1], 1)
+
+        mask = mask.bool()
+        idx_mask = mask.transpose(1, 2).reshape(batch_size * seq_len, self.num_mask).sum(dim=0)
+        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[
+            0
+        ].tolist()  # length: number of "activated" expert / value: index
+        for idx in idx_mask:
+            next_states[mask[:, :, idx]] = getattr(self.mask_gen, "mask_{}".format(idx))(
+                x[mask[:, :, idx]]
+            )
+
+         # Combine the outputs from the top-2 experts
+        x = router_probabilities * next_states
         return x
     def copy_weights(self):
         # Copy weights from the original model to the custom model
        
-        original_model =  T5ForTokenClassification.from_pretrained('google/flan-t5-base', num_labels=1)
+        original_model =  T5ForTokenClassification.from_pretrained('google/flan-t5-base', num_labels=1, device_map="auto")
         original_state_dict = original_model.state_dict()
         for name, param in original_state_dict.items():
             if name in dict(self.TokenClassification.state_dict()):  # Check if the parameter exists in the custom model
@@ -356,7 +409,7 @@ class chanFSM(nn.Module):
         super().__init__()
         # self.tokenizer_flan = AutoTokenizer.from_pretrained("google/flan-t5-small")
         # self.tokenizer_bert = AutoTokenizer.from_pretrained("bert-base-uncased")
-        self.mask_generator = chan_mask_gen(embed_dim)
+        self.mask_generator = chan_mask_gen(num_token=mask_num, embed_dim=embed_dim)
         self.mask_num = mask_num
         
     def forward(self, input_ids, input_feature, noise_feature, prev_m): 
@@ -516,7 +569,7 @@ class T5MoEDenseGatedActDense(nn.Module):
         # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
         # Compute sparsity regularization term
         sparsity_loss = self.sparsity_regularization(gate_probabilities)
-        return hidden_states, sparsity_loss
+        return hidden_states
 
     def sparsity_regularization(self, gate_probabilities):
         # Compute entropy-based sparsity regularization term
@@ -539,7 +592,7 @@ class T5LayerFF(nn.Module):
     def forward(self, hidden_states):
         
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states, sparsity_loss = self.DenseReluDense(forwarded_states)
+        forwarded_states = self.DenseReluDense(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         
         return hidden_states
@@ -588,6 +641,7 @@ class T5Block(nn.Module):
             cross_attn_past_key_value = past_key_value[2:]
         else:
             self_attn_past_key_value, cross_attn_past_key_value = None, None
+
 
         self_attention_outputs = self.layer[0](
             hidden_states,
@@ -653,6 +707,9 @@ class T5Block(nn.Module):
         
         hidden_states = self.layer[-1](hidden_states)
         
+        
+
+
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
@@ -779,7 +836,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        noise_std = 10**(-torch.FloatTensor([18.0])/20),
+        noise_std = 10**(-torch.FloatTensor([22.0])/20),
         mode='info',
         sparsity_loss = torch.tensor(0.0, dtype=torch.float32),
     ):
@@ -872,8 +929,6 @@ class T5Stack(T5PreTrainedModel):
         transmitted_num = None
 
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
-            # if not self.is_decoder and i==len(self.block)-1 and mode=='info':
-            #     break
             layer_head_mask = head_mask[i]
             cross_attn_layer_head_mask = cross_attn_head_mask[i]
             # Model parallel
@@ -929,6 +984,7 @@ class T5Stack(T5PreTrainedModel):
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
+
             # print("------------")
             # print("layer_outputs: ", layer_outputs)
             # if self.training:
@@ -1000,6 +1056,7 @@ class T5Stack(T5PreTrainedModel):
 
             elif not self.is_decoder:
                 compression_rate_group = compression_rate_group + (torch.sum(attention_mask.float(), dim = 1),)
+                transmitted_num = compression_rate_group[-1]
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
@@ -1008,6 +1065,7 @@ class T5Stack(T5PreTrainedModel):
             else:
                 mask_dict = mask_dict + (encoder_attention_mask,)
                 compression_rate_group = compression_rate_group + (torch.sum(attention_mask, dim = 1),)
+                transmitted_num = compression_rate_group[-1]
                 compression_rates = compression_rate_group[-1]
                 confidence_rate_group = confidence_rate_group + (None,)
                 confidence_rate = confidence_rate_group[-1]
@@ -1112,11 +1170,11 @@ class T5SC_model(T5PreTrainedModel):
         #         getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wi_0.weight.data.copy_(w_0_weight.data)
         #         getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wi_1.weight.data.copy_(w_1_weight.data)
         #         getattr(self.encoder.block[block_idx].layer[1].DenseReluDense.experts, f"expert_{expert}").wo.weight.data.copy_(wo_weight.data)
-        self.encoder.FSMs[0].mask_generator.copy_weights()
+        # self.encoder.FSMs[0].mask_generator.copy_weights()
         for name, module in self.named_modules():
-            
             if ('FSMs' in name) and (not 'TokenClassification' in name) and isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
+                nn.init.zeros_(module.bias)
             elif 'noise_func' in name and isinstance(module, nn.Linear):
                 init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
                 nn.init.zeros_(module.bias)
@@ -1265,13 +1323,14 @@ class T5SC_model(T5PreTrainedModel):
             self.is_channel_disable=False
 
         if self.training:
-            snr_list = np.arange(-6, 26, 4)
+            snr_list = np.arange(2, 26, 4)
             SNRdb = (torch.FloatTensor([1]) * np.random.choice(snr_list)).to(self.device)
-            # SNRdb = torch.FloatTensor([6.0]).to(self.device)
+            # SNRdb = torch.FloatTensor([100.0]).to(self.device)
         else:
-            SNRdb = torch.FloatTensor([18.0]).to(self.device)
+            SNRdb = torch.FloatTensor([22.0]).to(self.device)
         # print("Is training? ", self.training, "mode: ", mode, "SNR: ", SNRdb)
         noise_std = 10**(-SNRdb/20)
+        
         
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1303,8 +1362,8 @@ class T5SC_model(T5PreTrainedModel):
         transmitted_num = encoder_outputs.transmitted_num 
         # print("transmitted_num: ", transmitted_num)
         # print("compression_rate: ", compression_rate)
-           
         compression_rate = compression_rate.to(hidden_states.device)
+        transmitted_num = transmitted_num.to(hidden_states.device)
         power = PowerNormalize(hidden_states, transmitted_num).to(hidden_states.device)
         # print("power: ", power)
         mask_dict = mask_dict.to(hidden_states.device)
@@ -1384,15 +1443,40 @@ class T5SC_model(T5PreTrainedModel):
         # print("lm_logits: ", lm_logits.shape)
     
         loss=None
+        
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             # codebook_loss = codebook_loss.to(lm_logits.device)
             compression_rate = compression_rate.to(lm_logits.device)
-            confidence_rate = confidence_rate.to(lm_logits.device)
+            # confidence_rate = confidence_rate.to(lm_logits.device)
             # print("Average compression rate: ", torch.mean(compression_rate))
-            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+1e2*torch.mean(compression_rate)
+            # if task == 'commonsense_qa':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.6, 1e-3)+torch.mean(compression_rate)
+            # elif task=='sen':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)+1e2*torch.mean(compression_rate)
+            # elif task=='agnews':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.1, 1e-3)+2*1e2*torch.mean(compression_rate)
+            # elif task == 'glue_mrpc':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.25, 1e-3)+2*1e2*torch.mean(compression_rate)
+            # elif task == 'glue_qqp':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)+2*1e2*torch.mean(compression_rate)
+            # elif task == 'labeled_final':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)+2*1e2*torch.mean(compression_rate)
+            # elif task == 'boolq':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 1e-3)+2*1e2*torch.mean(compression_rate)
+            # elif task == 'arc_easy':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.5, 1e-3)+torch.mean(compression_rate)
+            # elif task == 'qa':
+            #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.4, 1e-3)+1e-1*torch.mean(compression_rate)
+            # else:
+            loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))+10*torch.mean(compression_rate)
+            
+            # if task == 'sen' or 'agnews' or 'glue_mrpc' or 'glue_qqp' or 'labeled_final' or 'boolq':
+            #     loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            # else:
+            #     loss = 1e3*loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # if task == 'sen':
             #     loss = 1e3*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.3, 1e-3)# +1e1*torch.mean(compression_rate)
             # elif task == 'trans':
@@ -1407,6 +1491,7 @@ class T5SC_model(T5PreTrainedModel):
             #     # loss = 1e5*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.0, 0.0)#+1e-3*torch.mean(compression_rate)
             # else:
             #     loss = 1e4*max(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))-0.7, 0.0)+5e-1*torch.mean(compression_rate)#+1*torch.mean(confidence_rate)
+            # print("Task: ", task)
             # print("SNR: ", SNRdb)
             # print("CrossEntropyLoss: ",loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1)))
             # print("Loss from compression: ", torch.mean(compression_rate))
@@ -1424,6 +1509,7 @@ class T5SC_model(T5PreTrainedModel):
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
+        
 
         return Seq2SeqLMSCOutput(
             loss=loss,
@@ -1513,7 +1599,7 @@ class T5SC_model(T5PreTrainedModel):
         self,input_ids: Optional[torch.LongTensor] = None, 
         attention_mask: Optional[torch.FloatTensor] = None
     ):
-        SNRdb = torch.FloatTensor([6.0]).to(self.device)
+        SNRdb = torch.FloatTensor([22.0]).to(self.device)
         noise_std = 10**(-SNRdb/20)
         encoder_outputs = self.encoder(
                 input_ids=input_ids,
